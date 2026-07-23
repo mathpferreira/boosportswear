@@ -17,10 +17,39 @@ export default function Login() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
     setErro('');
     setCarregando(true);
+
+    // ==========================================
+    // 🛡️ BLINDAGEM E VALIDAÇÕES DO FORMULÁRIO
+    // ==========================================
+    if (modoCadastro) {
+      // 1. Valida se tem Nome e Sobrenome (mínimo 2 palavras)
+      const palavrasNome = formData.nome.trim().split(/\s+/);
+      if (palavrasNome.length < 2) {
+        setErro('Por favor, insira seu nome e sobrenome completos.');
+        setCarregando(false);
+        return; // Para a execução aqui
+      }
+    }
+
+    // 2. Validação forte de E-mail (Regex)
+    const regexEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!regexEmail.test(formData.email)) {
+      setErro('Por favor, digite um endereço de e-mail válido.');
+      setCarregando(false);
+      return;
+    }
+
+    // 3. Tamanho mínimo da Senha
+    if (formData.senha.length < 6) {
+      setErro('Sua senha deve ter no mínimo 6 caracteres.');
+      setCarregando(false);
+      return;
+    }
+    // ==========================================
 
     const endpoint = modoCadastro ? `${API_URL}/auth/cadastro` : `${API_URL}/auth/login`;
 
@@ -41,7 +70,7 @@ export default function Login() {
       localStorage.setItem('@BOO:token', dados.token);
       localStorage.setItem('@BOO:usuario', JSON.stringify(dados.usuario));
 
-      // Se for ADMIN, vai para o painel de gestão. Se for CLIENTE, vai para a loja.
+      // Se for ADMIN, vai para o painel. Se for CLIENTE, vai para a loja.
       if (dados.usuario.role === 'ADMIN') {
         window.location.href = '/admin';
       } else {
