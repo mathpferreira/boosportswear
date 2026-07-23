@@ -1,0 +1,19 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Produto {
+  id          Int      @id @default(autoincrement())
+  nome        String
+  preco       Decimal  @db.Decimal(10,2)
+  esgotado    Boolean  @default(false)
+  ultimaPeca  Boolean  @default(false)
+  imagens     String[]
+  criadoEm    DateTime @default(now())
+
+  @@map("produtos")
+}
