@@ -104,7 +104,7 @@ const handleSubmit = async (e) => {
             {modoCadastro && (
               <div>
                 <label className="block text-[10px] font-bold tracking-widest uppercase text-zinc-500 mb-2">
-                  Nome Completo
+                  Nome
                 </label>
                 <input
                   type="text"
