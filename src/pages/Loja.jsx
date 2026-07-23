@@ -1,275 +1,253 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react';
 
 export default function Loja() {
-  const [produtosBrazilian, setProdutosBrazilian] = useState([])
-  const [corSelecionadaPorProduto, setCorSelecionadaPorProduto] = useState({})
+  const [produtosBrazilian, setProdutosBrazilian] = useState([]);
+  const [corSelecionadaPorProduto, setCorSelecionadaPorProduto] = useState({});
   
-  const [produtoSelecionado, setProdutoSelecionado] = useState(null)
-  const [tamanhoEscolhido, setTamanhoEscolhido] = useState("M")
-  const [carrinho, setCarrinho] = useState([])
-  const [isSacolaAberta, setIsSacolaAberta] = useState(false)
-  const [cep, setCep] = useState("")
-  const [freteResultado, setFreteResultado] = useState(null)
+  const [produtoSelecionado, setProdutoSelecionado] = useState(null);
+  const [tamanhoEscolhido, setTamanhoEscolhido] = useState("M");
+  const [carrinho, setCarrinho] = useState([]);
+  const [isSacolaAberta, setIsSacolaAberta] = useState(false);
+  const [cep, setCep] = useState("");
+  const [freteResultado, setFreteResultado] = useState(null);
   
-  // Configurações puxadas do Admin
-  const [fraseTopo, setFraseTopo] = useState("FRETE GRÁTIS A PARTIR DE R$ 250 • PARCELAMENTO EM ATÉ 3X SEM JUROS")
-  const [whatsappLoja, setWhatsappLoja] = useState("5511999999999")
+  // Configurações da Loja
+  const [fraseTopo, setFraseTopo] = useState("FRETE GRÁTIS A PARTIR DE R$ 250 • PARCELAMENTO EM ATÉ 3X SEM JUROS");
+  const [whatsappLoja, setWhatsappLoja] = useState("5511999999999");
+
+  // URL Base do Backend na sua VPS Debian
+  const API_URL = "http://167.148.161.90/api";
 
   useEffect(() => {
-    // Carrega produtos
-    const dadosSalvos = localStorage.getItem('@LojaDaBia:produtos');
-    if (dadosSalvos) {
-      const produtosFormatados = JSON.parse(dadosSalvos).map(p => ({
-        ...p,
-        imagens: p.imagens ? p.imagens.map(img => typeof img === 'string' ? { url: img, cor: p.cores[0] } : img) : [{ url: p.imgUrl, cor: "#000000" }]
-      }));
-      setProdutosBrazilian(produtosFormatados);
-    } else {
-      const produtosIniciais = [
-        { 
-          id: 1, 
-          nome: "Conjunto Brazilcore", 
-          preco: "200,00", 
-          estoque: 5, 
-          cores: ["#ffbb00", "#1D4ED8"], 
-          imagens: [
-            { url: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=600", cor: "#ffbb00" },
-            { url: "https://images.unsplash.com/photo-1554412933-514a83d2f3c8?q=80&w=600", cor: "#1D4ED8" }
-          ] 
+    // Carrega produtos vindos diretamente da API no PostgreSQL da VPS
+    async function carregarProdutos() {
+      try {
+        const resposta = await fetch(`${API_URL}/produtos`);
+        if (resposta.ok) {
+          const dados = await resposta.json();
+          const produtosFormatados = dados.map(p => ({
+            ...p,
+            imagens: p.imagens 
+              ? p.imagens.map(img => typeof img === 'string' ? { url: img, cor: p.cores[0] } : img) 
+              : [{ url: p.imgUrl || '', cor: p.cores[0] }]
+          }));
+          setProdutosBrazilian(produtosFormatados);
+        } else {
+          console.warn("API respondeu com status de erro:", resposta.status);
         }
-      ];
-      setProdutosBrazilian(produtosIniciais);
-      localStorage.setItem('@LojaDaBia:produtos', JSON.stringify(produtosIniciais));
+      } catch (erro) {
+        console.error("Erro ao carregar produtos da VPS:", erro);
+      }
     }
 
-    // Carrega configurações da loja
-    const configSalva = localStorage.getItem('@LojaDaBia:config');
-    if (configSalva) {
-      const config = JSON.parse(configSalva);
-      if (config.fraseTopo) setFraseTopo(config.fraseTopo);
-      if (config.whatsappContato) setWhatsappLoja(config.whatsappContato);
-    }
+    carregarProdutos();
   }, []);
 
-  const selecionarCorProduto = (produtoId, corHex, e) => {
-    if (e) e.stopPropagation();
-    setCorSelecionadaPorProduto(prev => ({ ...prev, [produtoId]: corHex }));
+  const selecionarCor = (produtoId, cor) => {
+    setCorSelecionadaPorProduto(prev => ({
+      ...prev,
+      [produtoId]: cor
+    }));
   };
 
-  const adicionarAoCarrinho = (produto, cor, tamanho) => {
-    const itemExistente = carrinho.find(i => i.id === produto.id && i.cor === cor && i.tamanho === tamanho);
-    if (itemExistente) {
-      setCarrinho(carrinho.map(i => i === itemExistente ? { ...i, qtd: i.qtd + 1 } : i));
-    } else {
-      setCarrinho([...carrinho, { ...produto, cor, tamanho, qtd: 1, imagemCapa: produto.imagens[0].url }]);
-    }
-    setIsSacolaAberta(true);
+  const abrirModalProduto = (produto) => {
+    setProdutoSelecionado(produto);
+    setTamanhoEscolhido("M");
+  };
+
+  const adicionarAoCarrinho = (produto, tamanho, cor) => {
+    const item = {
+      ...produto,
+      tamanhoEscolhido: tamanho,
+      corEscolhida: cor || produto.cores[0],
+      cartId: `${produto.id}-${tamanho}-${cor || produto.cores[0]}`
+    };
+
+    setCarrinho(prev => {
+      const existe = prev.find(i => i.cartId === item.cartId);
+      if (existe) {
+        return prev.map(i => i.cartId === item.cartId ? { ...i, quantidade: i.quantidade + 1 } : i);
+      }
+      return [...prev, { ...item, quantidade: 1 }];
+    });
+
     setProdutoSelecionado(null);
+    setIsSacolaAberta(true);
+  };
+
+  const removerDoCarrinho = (cartId) => {
+    setCarrinho(prev => prev.filter(item => item.cartId !== cartId));
   };
 
   const calcularFrete = (e) => {
     e.preventDefault();
-    const cepLimpo = cep.replace(/\D/g, '');
-    if (cepLimpo.length !== 8) {
-      alert("Por favor, digite um CEP válido com 8 dígitos.");
-      return;
-    }
-
-    const prefixo = parseInt(cepLimpo.substring(0, 2), 10);
-    let valorFrete = "38,00";
-    let prazo = "8 a 12 dias úteis";
-
-    if (prefixo >= 1 && prefixo <= 9) {
-      valorFrete = "15,00";
-      prazo = "2 a 3 dias úteis";
-    } else if (prefixo >= 10 && prefixo <= 19) {
-      valorFrete = "20,00";
-      prazo = "3 a 5 dias úteis";
-    } else if (prefixo >= 20 && prefixo <= 34) {
-      valorFrete = "25,00";
-      prazo = "4 a 7 dias úteis";
-    }
-
-    setFreteResultado({ valor: valorFrete, prazo: prazo });
+    if (!cep || cep.length < 8) return;
+    setFreteResultado({
+      valor: 19.90,
+      prazo: "3 a 5 dias úteis"
+    });
   };
 
-  const totalCarrinho = carrinho.reduce((acc, item) => acc + (parseFloat(item.preco.replace(',', '.')) * item.qtd), 0);
+  const totalCarrinho = carrinho.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
 
   const finalizarWhatsApp = () => {
-    if (carrinho.length === 0) return;
-    let mensagem = "Olá! Gostaria de finalizar o seguinte pedido na BOO:\n\n";
+    let mensagem = `*NOVO PEDIDO - BOO SPORTWEAR*\n\n`;
     carrinho.forEach(item => {
-      mensagem += `• ${item.qtd}x ${item.nome} (Tam: ${item.tamanho}) - R$ ${item.preco}\n`;
+      mensagem += `• ${item.nome} (${item.tamanhoEscolhido} / ${item.corEscolhida}) x${item.quantidade} - R$ ${(item.preco * item.quantidade).toFixed(2)}\n`;
     });
-    mensagem += `\n*Total dos Produtos:* R$ ${totalCarrinho.toFixed(2).replace('.', ',')}`;
-    
-    window.open(`https://wa.me/${whatsappLoja}?text=${encodeURIComponent(mensagem)}`, '_blank');
+    mensagem += `\n*Subtotal:* R$ ${totalCarrinho.toFixed(2)}`;
+    if (freteResultado) {
+      mensagem += `\n*Frete:* R$ ${freteResultado.valor.toFixed(2)}`;
+      mensagem += `\n*Total com Frete:* R$ ${(totalCarrinho + freteResultado.valor).toFixed(2)}`;
+    }
+
+    const url = `https://wa.me/${whatsappLoja}?text=${encodeURIComponent(mensagem)}`;
+    window.open(url, '_blank');
   };
 
   return (
-    <div className="min-h-screen bg-white text-black antialiased font-sans relative">
-      
-      <div className="bg-black text-white text-[10px] font-bold tracking-[0.25em] uppercase text-center py-3 px-4">
+    <div className="min-h-screen bg-white text-zinc-900 font-sans antialiased">
+      {/* Tarja do Topo */}
+      <div className="bg-black text-white text-[10px] tracking-[0.2em] py-2.5 px-4 text-center font-medium uppercase">
         {fraseTopo}
       </div>
 
-      <header className="border-b border-zinc-100 bg-white relative z-40">
-        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6 relative">
-          <nav className="hidden md:flex space-x-8 text-[11px] font-bold tracking-[0.2em] uppercase text-zinc-500">
-            <a href="#" className="hover:text-black transition-colors">Novidades</a>
-            <a href="#" className="hover:text-black transition-colors">Coleções</a>
-            <a href="#" className="hover:text-black transition-colors">TENDÊNCIA</a>
-          </nav>
+      {/* Header */}
+      <header className="bg-white border-b border-zinc-100 sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+          <h1 className="text-2xl font-black tracking-[0.3em] uppercase">BOO</h1>
           
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 cursor-pointer flex items-center justify-center">
-            <img src="https://i.imgur.com/7SkAZrX.jpeg" className="h-14 w-auto object-contain" alt="Logo" />
-          </div>
-
-          <div className="flex items-center space-x-6 text-[11px] font-bold tracking-[0.2em] uppercase text-black">
-            <button onClick={() => setIsSacolaAberta(true)} className="hover:opacity-50 cursor-pointer flex items-center gap-1 font-bold">
-              SACOLA ({carrinho.reduce((a, b) => a + b.qtd, 0)})
-            </button>
-          </div>
+          <button 
+            onClick={() => setIsSacolaAberta(true)}
+            className="relative cursor-pointer hover:opacity-75 transition-opacity"
+          >
+            <span className="text-xs tracking-widest font-bold uppercase">Sacola</span>
+            {carrinho.length > 0 && (
+              <span className="absolute -top-2 -right-3 bg-black text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                {carrinho.reduce((a, b) => a + b.quantidade, 0)}
+              </span>
+            )}
+          </button>
         </div>
       </header>
 
-      <section className="w-full relative h-[65vh] md:h-[75vh] bg-zinc-900 overflow-hidden flex items-center justify-center">
-        <img src="https://i.imgur.com/blqb9nx.jpeg" alt="Banner" className="absolute inset-0 w-full h-full object-cover opacity-65" />
-        <div className="absolute inset-0 bg-black/20" />
-        <div className="relative z-10 text-center px-4 max-w-3xl">
-          <span className="text-[10px] font-bold tracking-[0.5em] uppercase text-white/90 mb-4 block">MARCA FITNESSWEAR</span>
-          <h1 className="text-4xl sm:text-6xl font-light tracking-widest text-white uppercase mb-8 leading-tight font-serif not-italic">ESCULPIDO PARA O MOVIMENTO</h1>
-          <button className="bg-white text-black text-[11px] font-bold tracking-[0.3em] uppercase px-12 py-4 hover:bg-black hover:text-white transition-all rounded-none duration-300 cursor-pointer">CONFIRA O DROP</button>
+      {/* Hero Section */}
+      <section className="relative h-[70vh] bg-zinc-900 flex items-center justify-center text-center text-white px-6">
+        <div className="max-w-2xl space-y-4">
+          <span className="text-xs tracking-[0.4em] uppercase text-zinc-400">Nova Coleção</span>
+          <h2 className="text-4xl md:text-6xl font-black tracking-tight uppercase">Performance & Estilo</h2>
+          <p className="text-xs text-zinc-300 tracking-widest uppercase font-light">Peças desenhadas para alta performance e conforto absoluto.</p>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-16 relative">
-        <div className="flex flex-col items-center justify-center text-center mb-12">
-          <h2 className="text-lg font-bold tracking-[0.25em] uppercase text-black">COLEÇÃO BRAZILIAN</h2>
-          <p className="text-xs text-zinc-400 tracking-wide mt-1">Clique em qualquer peça para ver os detalhes</p>
+      {/* Catálogo de Produtos */}
+      <main className="max-w-7xl mx-auto px-6 py-20">
+        <div className="flex justify-between items-center mb-12 border-b border-zinc-100 pb-4">
+          <h3 className="text-sm font-bold tracking-[0.2em] uppercase">Catálogo Oficial</h3>
+          <span className="text-xs text-zinc-400">{produtosBrazilian.length} produtos disponíveis</span>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-12">
-          {produtosBrazilian.map((prod) => {
-            const isEsgotado = prod.estoque === 0;
-            const corAtual = corSelecionadaPorProduto[prod.id] || (prod.cores && prod.cores[0]);
-            const fotoCorrespondente = prod.imagens.find(img => img.cor === corAtual);
-            const imagemAtual = fotoCorrespondente ? fotoCorrespondente.url : prod.imagens[0].url;
+        {produtosBrazilian.length === 0 ? (
+          <div className="text-center py-20 text-zinc-400 text-xs tracking-widest uppercase">
+            Nenhum produto cadastrado no momento.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
+            {produtosBrazilian.map((produto) => {
+              const corAtiva = corSelecionadaPorProduto[produto.id] || produto.cores[0];
+              const imagemAtual = produto.imagens?.find(img => img.cor === corAtiva)?.url || produto.imagens?.[0]?.url || produto.imgUrl;
 
-            return (
-              <div 
-                key={prod.id} 
-                onClick={() => setProdutoSelecionado({ ...prod, corSelecionada: corAtual })}
-                className="group flex flex-col relative cursor-pointer"
-              >
-                <div className="aspect-[3/4] w-full bg-[#F6F6F6] relative flex items-center justify-center overflow-hidden">
-                  {isEsgotado && (
-                    <span className="absolute top-3 left-3 bg-[#B0B0B0] text-white text-[9px] tracking-wider uppercase px-2 py-0.5 font-medium z-10">ESGOTADO</span>
-                  )}
-                  <img src={imagemAtual} alt={prod.nome} className="absolute inset-0 w-full h-full object-cover group-hover:scale-102 duration-500 transition-all" />
-                </div>
-
-                <div className="mt-4 flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
-                  {prod.cores && prod.cores.map((corHex, idx) => (
-                    <button 
-                      key={idx}
-                      onClick={(e) => selecionarCorProduto(prod.id, corHex, e)}
-                      style={{ backgroundColor: corHex }} 
-                      className={`w-3.5 h-3.5 rounded-full block cursor-pointer transition-transform ${
-                        corAtual === corHex ? 'scale-125 ring-1 ring-black ring-offset-2' : 'border border-zinc-200'
-                      }`}
+              return (
+                <div key={produto.id} className="group cursor-pointer">
+                  <div 
+                    onClick={() => abrirModalProduto(produto)}
+                    className="aspect-3/4 bg-zinc-100 rounded overflow-hidden mb-4 relative"
+                  >
+                    <img 
+                      src={imagemAtual} 
+                      alt={produto.nome}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
                     />
-                  ))}
-                </div>
+                  </div>
 
-                <div className="mt-2.5 flex flex-col space-y-0.5 text-left">
-                  <h3 className="text-sm font-normal text-zinc-700 tracking-wide">{prod.nome}</h3>
-                  <p className="text-sm font-bold text-black">R$ {prod.preco}</p>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
+                  <div className="space-y-1.5">
+                    <h4 onClick={() => abrirModalProduto(produto)} className="text-xs font-semibold uppercase tracking-wider text-zinc-800 hover:text-black">
+                      {produto.nome}
+                    </h4>
+                    <p className="text-xs font-bold text-zinc-900">
+                      R$ {Number(produto.preco).toFixed(2).replace('.', ',')}
+                    </p>
 
+                    {/* Seleção de Cores na Vitrine */}
+                    {produto.cores && produto.cores.length > 0 && (
+                      <div className="flex gap-1.5 pt-1">
+                        {produto.cores.map((cor, i) => (
+                          <button
+                            key={i}
+                            onClick={() => selecionarCor(produto.id, cor)}
+                            style={{ backgroundColor: cor }}
+                            className={`w-3.5 h-3.5 rounded-full border ${corAtiva === cor ? 'border-black scale-110' : 'border-zinc-300'} transition-all cursor-pointer`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
+
+      {/* Modal de Detalhes do Produto */}
       {produtoSelecionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden relative animate-fade-in grid grid-cols-1 md:grid-cols-2">
-            
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="bg-white w-full max-w-3xl rounded-lg overflow-hidden shadow-2xl flex flex-col md:flex-row relative">
             <button 
-              onClick={() => { setProdutoSelecionado(null); setFreteResultado(null); setCep(""); }} 
-              className="absolute top-4 right-4 z-20 bg-white/80 hover:bg-white text-black w-8 h-8 rounded-full flex items-center justify-center text-lg font-bold shadow-sm cursor-pointer"
+              onClick={() => setProdutoSelecionado(null)}
+              className="absolute top-4 right-4 z-10 w-8 h-8 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-600 hover:bg-zinc-200 cursor-pointer text-xs"
             >
               ✕
             </button>
 
-            <div className="bg-zinc-100 aspect-[3/4] relative">
+            <div className="md:w-1/2 aspect-3/4 bg-zinc-100">
               <img 
-                src={produtoSelecionado.imagens.find(img => img.cor === produtoSelecionado.corSelecionada)?.url || produtoSelecionado.imagens[0].url} 
-                alt={produtoSelecionado.nome} 
-                className="w-full h-full object-cover"
+                src={produtoSelecionado.imagens?.[0]?.url || produtoSelecionado.imgUrl} 
+                alt={produtoSelecionado.nome}
+                className="w-full h-full object-cover" 
               />
             </div>
 
-            <div className="p-8 flex flex-col justify-between space-y-6">
-              <div className="space-y-4">
-                <h2 className="text-2xl font-normal tracking-tight text-zinc-900">{produtoSelecionado.nome}</h2>
-                <p className="text-xl font-bold text-black">R$ {produtoSelecionado.preco}</p>
-                
+            <div className="md:w-1/2 p-8 flex flex-col justify-between">
+              <div className="space-y-6">
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-400 mb-2">Cor Selecionada</label>
-                  <div className="flex gap-2">
-                    {produtoSelecionado.cores.map((corHex, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setProdutoSelecionado({ ...produtoSelecionado, corSelecionada: corHex })}
-                        style={{ backgroundColor: corHex }}
-                        className={`w-6 h-6 rounded-full border cursor-pointer ${produtoSelecionado.corSelecionada === corHex ? 'ring-2 ring-black ring-offset-2' : 'border-zinc-300'}`}
-                      />
-                    ))}
-                  </div>
+                  <h3 className="text-lg font-bold uppercase tracking-wider">{produtoSelecionado.nome}</h3>
+                  <p className="text-base font-black text-zinc-900 mt-1">
+                    R$ {Number(produtoSelecionado.preco).toFixed(2).replace('.', ',')}
+                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-400 mb-2">Tamanho</label>
+                  <label className="text-[10px] font-bold tracking-widest uppercase text-zinc-400 block mb-2">Tamanho</label>
                   <div className="flex gap-2">
-                    {['P', 'M', 'G', 'GG'].map(tam => (
+                    {["PP", "P", "M", "G", "GG"].map(tam => (
                       <button
                         key={tam}
                         onClick={() => setTamanhoEscolhido(tam)}
-                        className={`w-10 h-10 rounded border text-xs font-medium uppercase tracking-wider transition-all cursor-pointer ${tamanhoEscolhido === tam ? 'bg-black text-white border-black' : 'bg-white text-zinc-700 border-zinc-200 hover:border-black'}`}
+                        className={`w-10 h-10 border rounded text-xs font-bold cursor-pointer transition-colors ${
+                          tamanhoEscolhido === tam ? "border-black bg-black text-white" : "border-zinc-200 text-zinc-700 hover:border-zinc-400"
+                        }`}
                       >
                         {tam}
                       </button>
                     ))}
                   </div>
                 </div>
-
-                <div className="pt-4 border-t border-zinc-100">
-                  <label className="block text-xs font-medium uppercase tracking-wider text-zinc-400 mb-2">Calcular Frete</label>
-                  <form onSubmit={calcularFrete} className="flex gap-2">
-                    <input 
-                      type="text" 
-                      placeholder="Digite o CEP" 
-                      maxLength="8"
-                      value={cep} 
-                      onChange={(e) => setCep(e.target.value)} 
-                      className="border border-zinc-200 rounded px-3 py-1.5 text-xs flex-1 focus:outline-none focus:border-black"
-                    />
-                    <button type="submit" className="bg-zinc-100 hover:bg-zinc-200 text-black px-4 py-1.5 rounded text-xs font-medium uppercase tracking-wider cursor-pointer">OK</button>
-                  </form>
-                  {freteResultado && (
-                    <div className="mt-2 text-xs text-zinc-700 bg-zinc-50 p-2.5 rounded border border-zinc-100">
-                      <p>Envio para o CEP informado:</p>
-                      <p className="font-bold text-black mt-0.5">R$ {freteResultado.valor} — Prazo: {freteResultado.prazo}</p>
-                    </div>
-                  )}
-                </div>
               </div>
 
-              <button 
-                onClick={() => adicionarAoCarrinho(produtoSelecionado, produtoSelecionado.corSelecionada, tamanhoEscolhido)}
-                className="w-full bg-black text-white py-3.5 rounded text-xs font-medium tracking-widest uppercase hover:bg-zinc-800 transition-colors cursor-pointer"
+              <button
+                onClick={() => adicionarAoCarrinho(produtoSelecionado, tamanhoEscolhido, corSelecionadaPorProduto[produtoSelecionado.id])}
+                className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors mt-8 cursor-pointer"
               >
                 Adicionar à Sacola
               </button>
@@ -278,34 +256,62 @@ export default function Loja() {
         </div>
       )}
 
+      {/* Drawer do Carrinho / Sacola */}
       {isSacolaAberta && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-md h-full flex flex-col shadow-2xl animate-slide-left">
-            
-            <div className="p-6 border-b border-zinc-100 flex justify-between items-center">
-              <h3 className="text-sm uppercase tracking-widest font-bold">Sua Sacola ({carrinho.reduce((a, b) => a + b.qtd, 0)})</h3>
-              <button onClick={() => setIsSacolaAberta(false)} className="text-zinc-400 hover:text-black text-xl cursor-pointer">✕</button>
-            </div>
+          <div className="bg-white w-full max-w-md h-full flex flex-col justify-between shadow-2xl p-6">
+            <div>
+              <div className="flex justify-between items-center pb-6 border-b border-zinc-100">
+                <h3 className="text-sm font-bold tracking-widest uppercase">Sua Sacola</h3>
+                <button onClick={() => setIsSacolaAberta(false)} className="text-xs text-zinc-400 hover:text-black cursor-pointer">✕ FECHAR</button>
+              </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-              {carrinho.length === 0 ? (
-                <p className="text-center text-xs text-zinc-400 py-20 uppercase tracking-widest">Sua sacola está vazia.</p>
-              ) : (
-                carrinho.map((item, idx) => (
-                  <div key={idx} className="flex gap-4 items-center pb-4 border-b border-zinc-100">
-                    <img src={item.imagemCapa} alt={item.nome} className="w-16 h-20 object-cover rounded bg-zinc-100" />
-                    <div className="flex-1">
-                      <h4 className="text-xs font-medium text-zinc-900">{item.nome}</h4>
-                      <p className="text-[11px] text-zinc-400">Tam: {item.tamanho} | Qtd: {item.qtd}</p>
-                      <p className="text-xs font-bold text-black mt-1">R$ {item.preco}</p>
+              <div className="py-6 space-y-4 max-h-[50vh] overflow-y-auto">
+                {carrinho.length === 0 ? (
+                  <p className="text-center text-xs text-zinc-400 uppercase py-10">Sua sacola está vazia.</p>
+                ) : (
+                  carrinho.map(item => (
+                    <div key={item.cartId} className="flex justify-between items-center border-b border-zinc-50 pb-4">
+                      <div>
+                        <h4 className="text-xs font-bold uppercase">{item.nome}</h4>
+                        <p className="text-[10px] text-zinc-400 uppercase">Tamanho: {item.tamanhoEscolhido} | Qtd: {item.quantidade}</p>
+                        <p className="text-xs font-semibold mt-1">R$ {(item.preco * item.quantidade).toFixed(2)}</p>
+                      </div>
+                      <button onClick={() => removerDoCarrinho(item.cartId)} className="text-[10px] text-red-500 font-bold uppercase hover:underline cursor-pointer">
+                        Remover
+                      </button>
                     </div>
+                  ))
+                )}
+              </div>
+
+              {/* Cálculo de Frete */}
+              {carrinho.length > 0 && (
+                <form onSubmit={calcularFrete} className="pt-4 border-t border-zinc-100">
+                  <label className="text-[10px] font-bold tracking-widest uppercase text-zinc-400 block mb-2">Simular Frete</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="00000-000" 
+                      value={cep} 
+                      onChange={(e) => setCep(e.target.value)}
+                      className="flex-1 border border-zinc-200 rounded px-3 py-2 text-xs focus:outline-none focus:border-black"
+                    />
+                    <button type="submit" className="bg-zinc-100 hover:bg-zinc-200 px-4 py-2 rounded text-xs font-bold uppercase cursor-pointer">
+                      OK
+                    </button>
                   </div>
-                ))
+                  {freteResultado && (
+                    <p className="text-[10px] text-green-600 font-bold uppercase mt-2">
+                      Frete Fixo: R$ {freteResultado.valor.toFixed(2)} ({freteResultado.prazo})
+                    </p>
+                  )}
+                </form>
               )}
             </div>
 
             {carrinho.length > 0 && (
-              <div className="p-6 border-t border-zinc-100 space-y-4 bg-zinc-50">
+              <div className="pt-6 border-t border-zinc-100 space-y-4 bg-zinc-50 p-4 rounded">
                 <div className="flex justify-between text-sm font-bold">
                   <span>Subtotal:</span>
                   <span>R$ {totalCarrinho.toFixed(2).replace('.', ',')}</span>
@@ -314,7 +320,7 @@ export default function Loja() {
                   onClick={finalizarWhatsApp}
                   className="w-full bg-[#25D366] hover:bg-[#20ba5a] text-white py-3.5 rounded text-xs font-bold tracking-widest uppercase flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                 >
-                  Finalizar Pedido
+                  Finalizar Pedido via WhatsApp
                 </button>
               </div>
             )}
@@ -322,18 +328,18 @@ export default function Loja() {
         </div>
       )}
 
+      {/* Footer */}
       <footer className="bg-black text-white py-16 mt-20 border-t border-zinc-900">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
           <div className="space-y-2 text-center md:text-left">
             <h4 className="text-xl font-black tracking-[0.3em] uppercase">BOO</h4>
             <p className="text-xs text-zinc-400 font-light tracking-widest uppercase">ALTA QUALIDADE E ESTILO LUXUOSO</p>
           </div>
-          <div className="text-center md:text-right text-xs text-zinc-400 tracking-wider font-light space-y-1">
-            <p>© 2026 BOO SPORTWEAR</p>
-            <p className="text-[10px] text-zinc-500">Todos os direitos reservados</p>
+          <div className="text-center md:text-right text-xs text-zinc-400 tracking-wider">
+            © BOO SPORTWEAR. TODOS OS DIREITOS RESERVADOS.
           </div>
         </div>
       </footer>
     </div>
-  )
+  );
 }
