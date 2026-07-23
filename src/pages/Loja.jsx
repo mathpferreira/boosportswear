@@ -19,27 +19,18 @@ export default function Loja() {
   const API_URL = "http://167.148.161.90/api";
 
   useEffect(() => {
-    // Carrega produtos vindos diretamente da API no PostgreSQL da VPS
     async function carregarProdutos() {
       try {
         const resposta = await fetch(`${API_URL}/produtos`);
         if (resposta.ok) {
           const dados = await resposta.json();
-          const produtosFormatados = dados.map(p => ({
-            ...p,
-            imagens: p.imagens 
-              ? p.imagens.map(img => typeof img === 'string' ? { url: img, cor: p.cores[0] } : img) 
-              : [{ url: p.imgUrl || '', cor: p.cores[0] }]
-          }));
-          setProdutosBrazilian(produtosFormatados);
-        } else {
-          console.warn("API respondeu com status de erro:", resposta.status);
+          // Mantém a sua formatação visual
+          setProdutosBrazilian(dados); 
         }
       } catch (erro) {
-        console.error("Erro ao carregar produtos da VPS:", erro);
+        console.error("Erro ao carregar:", erro);
       }
     }
-
     carregarProdutos();
   }, []);
 
@@ -154,7 +145,7 @@ export default function Loja() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
             {produtosBrazilian.map((produto) => {
-              const corAtiva = corSelecionadaPorProduto[produto.id] || produto.cores[0];
+              const corAtiva = corSelecionadaPorProduto[produto.id] || produto.cores?.[0];
               const imagemAtual = produto.imagens?.find(img => img.cor === corAtiva)?.url || produto.imagens?.[0]?.url || produto.imgUrl;
 
               return (

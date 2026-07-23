@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react';
 
 export default function Admin() {
+  const [isVerificando, setIsVerificando] = useState(true);
   const [produtos, setProdutos] = useState([]);
   const [produtoEditando, setProdutoEditando] = useState(null);
+  const [novaImagemLink, setNovaImagemLink] = useState("");
   const [novaImagemCor, setNovaImagemCor] = useState("#000000");
   const [novaCorHex, setNovaCorHex] = useState("#000000");
   const [produtoParaExcluir, setProdutoParaExcluir] = useState(null);
   
+  // Abas: 'produtos' ou 'configuracoes'
   const [abaAtiva, setAbaAtiva] = useState('produtos');
 
+  // Configurações de Aparência da Loja
   const [configLoja, setConfigLoja] = useState({
     fraseTopo: "FRETE GRÁTIS A PARTIR DE R$ 250 • PARCELAMENTO EM ATÉ 3X SEM JUROS",
     whatsappContato: "5511999999999",
@@ -17,7 +21,6 @@ export default function Admin() {
 
   const [mensagemSucesso, setMensagemSucesso] = useState("");
 
-  // URL da API na VPS Debian
   const API_URL = "http://167.148.161.90/api";
 
   const dispararToast = (msg) => {
@@ -25,455 +28,441 @@ export default function Admin() {
     setTimeout(() => setMensagemSucesso(""), 3000);
   };
 
-  // 1. Carregar produtos do banco de dados na VPS
   const carregarProdutos = async () => {
     try {
-      const resposta = await fetch(`${API_URL}/produtos`);
-      if (resposta.ok) {
-        const dados = await resposta.json();
-        const produtosFormatados = dados.map(p => ({
+      const res = await fetch(`${API_URL}/produtos`);
+      if (res.ok) {
+        const data = await res.json();
+        const produtosFormatados = data.map(p => ({
           ...p,
-          preco: Number(p.preco) || 0,
-          cores: Array.isArray(p.cores) ? p.cores : [],
-          imagens: p.imagens 
-            ? p.imagens.map(img => typeof img === 'string' ? { url: img, cor: p.cores?.[0] || "#000000" } : img) 
-            : [{ url: p.imgUrl || '', cor: p.cores?.[0] || "#000000" }]
+          imagens: p.imagens ? p.imagens.map(img => typeof img === 'string' ? { url: img, cor: p.cores ? p.cores[0] : "#000000" } : img) : [{ url: p.imgUrl, cor: "#000000" }],
+          cores: p.cores || ["#000000"],
+          preco: p.preco?.toString().replace('.', ',') || "0,00"
         }));
         setProdutos(produtosFormatados);
       }
-    } catch (erro) {
-      console.error("Erro ao carregar produtos:", erro);
-      dispararToast("Erro ao conectar com o servidor!");
+    } catch (e) {
+      console.error("Erro ao carregar produtos:", e);
     }
   };
 
   useEffect(() => {
-    carregarProdutos();
-  }, []);
+    // PROTEÇÃO DA ROTA: Verifica se é a Bia (Admin) acessando
+    const token = localStorage.getItem('@BOO:token');
+    const usuarioSalvo = localStorage.getItem('@BOO:usuario');
 
-  const abrirNovoProduto = () => {
-    setProdutoEditando({
-      id: null,
-      nome: '',
-      preco: '',
-      imgUrl: '',
-      categoria: 'Leggings',
-      cores: ['#000000'],
-      imagens: []
-    });
-  };
-
-  // 2. Salvar / Atualizar Produto no Banco
-  const salvarProduto = async (e) => {
-    e.preventDefault();
-
-    if (!produtoEditando.nome || !produtoEditando.preco) {
-      alert("Por favor, preencha nome e preço do produto.");
+    if (!token || !usuarioSalvo) {
+      window.location.href = '/login';
       return;
     }
 
-    const payload = {
-      nome: produtoEditando.nome,
-      preco: parseFloat(produtoEditando.preco),
-      categoria: produtoEditando.categoria || 'Geral',
-      imgUrl: produtoEditando.imgUrl || (produtoEditando.imagens?.[0]?.url || ''),
-      cores: produtoEditando.cores || ['#000000'],
-      imagens: produtoEditando.imagens || []
-    };
-
-    try {
-      if (produtoEditando.id) {
-        // PUT: Atualiza produto existente
-        const resposta = await fetch(`${API_URL}/produtos/${produtoEditando.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (resposta.ok) {
-          dispararToast("Produto atualizado com sucesso!");
-          await carregarProdutos();
-        } else {
-          dispararToast("Erro ao atualizar o produto!");
-        }
-      } else {
-        // POST: Cria novo produto
-        const resposta = await fetch(`${API_URL}/produtos`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-
-        if (resposta.ok) {
-          dispararToast("Produto cadastrado no banco com sucesso!");
-          await carregarProdutos();
-        } else {
-          dispararToast("Erro ao cadastrar produto!");
-        }
-      }
-      setProdutoEditando(null);
-    } catch (erro) {
-      console.error("Erro ao salvar produto:", erro);
-      dispararToast("Erro ao conectar com a VPS!");
+    const usuario = JSON.parse(usuarioSalvo);
+    if (usuario.role !== 'ADMIN') {
+      window.location.href = '/';
+      return;
     }
+
+    // Se chegou aqui, a pessoa é a Bia e está autorizada! Libera a tela:
+    setIsVerificando(false); 
+
+    // Carrega produtos da VPS
+    carregarProdutos();
+
+    // Carrega configurações da loja
+    const configSalva = localStorage.getItem('@LojaDaBia:config');
+    if (configSalva) {
+      setConfigLoja(JSON.parse(configSalva));
+    }
+  }, []);
+
+  const criarNovoProduto = () => {
+    const produtoVazio = {
+      id: Date.now(), // Temporário até salvar no banco
+      isNew: true, // Flag para sabermos que ainda não está no banco
+      nome: "Novo Produto",
+      preco: "99,90",
+      estoque: 10,
+      cores: ["#000000", "#FFFFFF"],
+      status: "Ativo",
+      imagens: [{ url: "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=600", cor: "#000000" }]
+    };
+    setProdutos([produtoVazio, ...produtos]);
+    setProdutoEditando(produtoVazio);
   };
 
-  // 3. Excluir Produto do Banco
   const confirmarExclusao = async () => {
     if (!produtoParaExcluir) return;
 
-    try {
-      const resposta = await fetch(`${API_URL}/produtos/${produtoParaExcluir.id}`, {
-        method: 'DELETE'
-      });
-
-      if (resposta.ok) {
-        dispararToast("Produto removido do banco!");
-        await carregarProdutos();
-      } else {
-        dispararToast("Erro ao excluir produto!");
+    // Se o produto for novo e ainda não foi salvo, só apaga da tela
+    if (produtoParaExcluir.isNew) {
+      setProdutos(produtos.filter(prod => prod.id !== produtoParaExcluir.id));
+    } else {
+      // Se já estiver no banco, manda deletar na VPS
+      try {
+        await fetch(`${API_URL}/produtos/${produtoParaExcluir.id}`, { method: 'DELETE' });
+        setProdutos(produtos.filter(prod => prod.id !== produtoParaExcluir.id));
+      } catch (e) {
+        console.error(e);
       }
-    } catch (erro) {
-      console.error("Erro ao excluir:", erro);
-      dispararToast("Erro ao conectar com o servidor!");
-    } finally {
-      setProdutoParaExcluir(null);
+    }
+
+    if (produtoEditando && produtoEditando.id === produtoParaExcluir.id) {
+      setProdutoEditando(null);
+    }
+    setProdutoParaExcluir(null);
+    dispararToast("Produto excluído com sucesso!");
+  };
+
+  const adicionarImagem = () => {
+    if (novaImagemLink.trim() !== "") {
+      setProdutoEditando({
+        ...produtoEditando,
+        imagens: [...produtoEditando.imagens, { url: novaImagemLink, cor: novaImagemCor }]
+      });
+      setNovaImagemLink("");
     }
   };
 
-  // Adicionar URL de imagem extra vinculada a cor
-  const adicionarImagemUrl = (url) => {
-    if (!url.trim()) return;
-    setProdutoEditando(prev => ({
-      ...prev,
-      imagens: [...(prev.imagens || []), { url: url.trim(), cor: novaImagemCor }],
-      imgUrl: prev.imgUrl || url.trim()
-    }));
+  const atualizarCorDaImagem = (index, novaCor) => {
+    const novasImagens = [...produtoEditando.imagens];
+    novasImagens[index].cor = novaCor;
+    setProdutoEditando({ ...produtoEditando, imagens: novasImagens });
   };
 
   const removerImagem = (index) => {
-    setProdutoEditando(prev => {
-      const novasImagens = prev.imagens.filter((_, i) => i !== index);
-      return {
-        ...prev,
-        imagens: novasImagens,
-        imgUrl: novasImagens.length > 0 ? novasImagens[0].url : ''
-      };
+    const novas = [...produtoEditando.imagens];
+    novas.splice(index, 1);
+    setProdutoEditando({ ...produtoEditando, imagens: novas });
+  };
+
+  const moverImagem = (index, direcao) => {
+    const novas = [...produtoEditando.imagens];
+    if (direcao === 'cima' && index > 0) {
+      [novas[index - 1], novas[index]] = [novas[index], novas[index - 1]];
+    } else if (direcao === 'baixo' && index < novas.length - 1) {
+      [novas[index + 1], novas[index]] = [novas[index], novas[index + 1]];
+    }
+    setProdutoEditando({ ...produtoEditando, imagens: novas });
+  };
+
+  const adicionarCor = () => {
+    setProdutoEditando({
+      ...produtoEditando,
+      cores: [...produtoEditando.cores, novaCorHex]
     });
   };
 
-  const adicionarCorHex = () => {
-    if (produtoEditando.cores.includes(novaCorHex)) return;
-    setProdutoEditando(prev => ({
-      ...prev,
-      cores: [...prev.cores, novaCorHex]
-    }));
+  const removerCor = (index) => {
+    const novasCores = [...produtoEditando.cores];
+    novasCores.splice(index, 1);
+    setProdutoEditando({ ...produtoEditando, cores: novasCores });
   };
 
-  const removerCorHex = (corRemover) => {
-    setProdutoEditando(prev => ({
-      ...prev,
-      cores: prev.cores.filter(c => c !== corRemover)
-    }));
-  };
-
-  const salvarConfiguracoesLoja = (e) => {
+  const salvarEdicao = async (e) => {
     e.preventDefault();
-    dispararToast("Configurações da loja salvas!");
+    if (produtoEditando.imagens.length === 0) {
+      alert("Adicione pelo menos uma imagem!");
+      return;
+    }
+
+    const estoqueNum = parseInt(produtoEditando.estoque, 10);
+    const precoFloat = parseFloat(produtoEditando.preco.replace(',', '.'));
+
+    const payload = {
+      nome: produtoEditando.nome,
+      preco: isNaN(precoFloat) ? 0 : precoFloat,
+      estoque: estoqueNum,
+      cores: produtoEditando.cores,
+      imagens: produtoEditando.imagens,
+      imgUrl: produtoEditando.imagens[0]?.url || "",
+      categoria: "Geral"
+    };
+
+    try {
+      const endpoint = produtoEditando.isNew ? `${API_URL}/produtos` : `${API_URL}/produtos/${produtoEditando.id}`;
+      const method = produtoEditando.isNew ? 'POST' : 'PUT';
+
+      const res = await fetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        await carregarProdutos(); // Puxa os dados atualizados com o ID real do banco
+        setProdutoEditando(null);
+        dispararToast("Alterações salvas com sucesso!");
+      } else {
+        dispararToast("Erro ao salvar produto no banco.");
+      }
+    } catch(e) {
+      console.error(e);
+      dispararToast("Erro de conexão com o servidor.");
+    }
   };
+
+  const salvarConfiguracoes = (e) => {
+    e.preventDefault();
+    localStorage.setItem('@LojaDaBia:config', JSON.stringify(configLoja));
+    dispararToast("Configurações atualizadas com sucesso!");
+  };
+
+  // BLOCO DE SEGURANÇA: Mostra isso enquanto verifica o Token!
+  if (isVerificando) {
+    return (
+      <div className="h-screen bg-zinc-50 flex items-center justify-center text-xs font-bold tracking-widest uppercase text-zinc-500">
+        Autenticando...
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-zinc-50 font-sans text-zinc-900 pb-20 antialiased">
-      {/* Toast Notificação */}
+    <div className="flex h-screen bg-zinc-50 text-zinc-900 font-sans relative">
+      
       {mensagemSucesso && (
-        <div className="fixed top-6 right-6 z-50 bg-black text-white px-6 py-3 rounded shadow-2xl text-xs font-bold tracking-widest uppercase animate-bounce">
-          ✓ {mensagemSucesso}
+        <div className="fixed top-6 right-6 z-50 bg-black text-white px-6 py-3 rounded-lg shadow-xl text-xs uppercase tracking-widest font-medium animate-fade-in">
+          {mensagemSucesso}
         </div>
       )}
 
-      {/* Header do Admin */}
-      <header className="bg-white border-b border-zinc-200 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-black tracking-widest uppercase">BOO</h1>
-            <span className="text-[10px] bg-zinc-100 text-zinc-600 px-2.5 py-1 rounded font-bold uppercase tracking-wider">
-              Painel Gestor VPS
-            </span>
-          </div>
-
-          <a href="/" target="_blank" rel="noreferrer" className="text-xs text-zinc-500 hover:text-black font-semibold uppercase tracking-wider">
-            Ver Loja ao Vivo ↗
-          </a>
+      {/* SIDEBAR COM ÍCONES E TIPOGRAFIA AJUSTADA */}
+      <aside className="w-64 bg-white border-r border-zinc-200 flex flex-col flex-shrink-0">
+        <div className="h-20 flex items-center justify-center border-b border-zinc-100">
+            <h1 className="text-xl tracking-[0.05em] uppercase">
+            <span className="font-light text-zinc-400">BOO</span><span className="font-bold text-black">ADMIN</span>
+          </h1>
         </div>
-      </header>
-
-      {/* Conteúdo Principal */}
-      <main className="max-w-7xl mx-auto px-6 pt-10">
-        {/* Navegação entre Abas */}
-        <div className="flex gap-4 border-b border-zinc-200 mb-8">
+        <nav className="flex-1 p-4 space-y-1">
           <button 
-            onClick={() => setAbaAtiva('produtos')}
-            className={`pb-3 text-xs font-bold tracking-widest uppercase border-b-2 cursor-pointer transition-colors ${
-              abaAtiva === 'produtos' ? 'border-black text-black' : 'border-transparent text-zinc-400 hover:text-zinc-700'
-            }`}
+            onClick={() => { setAbaAtiva('produtos'); setProdutoEditando(null); }} 
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md font-medium text-sm transition-colors cursor-pointer ${abaAtiva === 'produtos' ? 'bg-zinc-100 text-black font-semibold' : 'text-zinc-500 hover:bg-zinc-50'}`}
           >
-            Gestão de Produtos ({produtos.length})
+            <svg className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+            Produtos
           </button>
+          
           <button 
-            onClick={() => setAbaAtiva('config')}
-            className={`pb-3 text-xs font-bold tracking-widest uppercase border-b-2 cursor-pointer transition-colors ${
-              abaAtiva === 'config' ? 'border-black text-black' : 'border-transparent text-zinc-400 hover:text-zinc-700'
-            }`}
+            onClick={() => { setAbaAtiva('configuracoes'); setProdutoEditando(null); }} 
+            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md font-medium text-sm transition-colors cursor-pointer ${abaAtiva === 'configuracoes' ? 'bg-zinc-100 text-black font-semibold' : 'text-zinc-500 hover:bg-zinc-50'}`}
           >
-            Configurações da Loja
+            <svg className="w-4 h-4 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            Configurações
           </button>
-        </div>
+        </nav>
+      </aside>
 
-        {/* ABA 1: PRODUTOS */}
+      <main className="flex-1 overflow-y-auto p-12 relative">
+        
         {abaAtiva === 'produtos' && (
-          <div>
-            <div className="flex justify-between items-center mb-8">
-              <div>
-                <h2 className="text-xl font-bold uppercase tracking-wider">Catálogo do Banco de Dados</h2>
-                <p className="text-xs text-zinc-500 mt-1">Sincronizado diretamente com o PostgreSQL da VPS.</p>
-              </div>
+          <>
+            {!produtoEditando ? (
+              <div className="max-w-6xl mx-auto">
+                <header className="flex justify-between items-center mb-8">
+                  <div>
+                    <h2 className="text-2xl font-normal tracking-tight">Catálogo</h2>
+                    <p className="text-sm text-zinc-400 mt-0.5">Gerencie os produtos da loja</p>
+                  </div>
+                  <button onClick={criarNovoProduto} className="bg-black text-white px-5 py-2 rounded-md font-medium text-xs tracking-wider uppercase hover:bg-zinc-800 transition-colors cursor-pointer">
+                    + Novo Produto
+                  </button>
+                </header>
 
-              <button 
-                onClick={abrirNovoProduto}
-                className="bg-black hover:bg-zinc-800 text-white px-6 py-3 rounded text-xs font-bold tracking-widest uppercase transition-colors cursor-pointer"
-              >
-                + Cadastrar Produto
-              </button>
-            </div>
-
-            {/* Tabela de Produtos */}
-            <div className="bg-white rounded-lg border border-zinc-200 shadow-sm overflow-hidden">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
-                  <tr>
-                    <th className="py-4 px-6">Produto</th>
-                    <th className="py-4 px-6">Categoria</th>
-                    <th className="py-4 px-6">Preço</th>
-                    <th className="py-4 px-6 text-right">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-100">
-                  {produtos.length === 0 ? (
-                    <tr>
-                      <td colSpan="4" className="py-12 text-center text-zinc-400 uppercase tracking-widest">
-                        Nenhum produto encontrado no banco de dados.
-                      </td>
-                    </tr>
-                  ) : (
-                    produtos.map((prod) => (
-                      <tr key={prod.id} className="hover:bg-zinc-50/50 transition-colors">
-                        <td className="py-4 px-6 flex items-center gap-4">
-                          <img 
-                            src={prod.imgUrl || prod.imagens?.[0]?.url || 'https://via.placeholder.com/100'} 
-                            alt={prod.nome} 
-                            className="w-12 h-14 object-cover rounded bg-zinc-100"
-                          />
-                          <span className="font-semibold uppercase text-zinc-900">{prod.nome}</span>
-                        </td>
-                        <td className="py-4 px-6 text-zinc-600 font-medium uppercase">{prod.categoria || 'Geral'}</td>
-                        <td className="py-4 px-6 font-bold text-zinc-900">R$ {Number(prod.preco).toFixed(2).replace('.', ',')}</td>
-                        <td className="py-4 px-6 text-right space-x-3">
-                          <button 
-                            onClick={() => setProdutoEditando(prod)}
-                            className="text-zinc-700 hover:text-black font-bold uppercase cursor-pointer"
-                          >
-                            Editar
-                          </button>
-                          <button 
-                            onClick={() => setProdutoParaExcluir(prod)}
-                            className="text-red-600 hover:text-red-800 font-bold uppercase cursor-pointer"
-                          >
-                            Excluir
-                          </button>
-                        </td>
+                <div className="bg-white border border-zinc-200 rounded-lg shadow-2xs overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-100 text-[11px] text-zinc-400 uppercase tracking-widest bg-zinc-50/50">
+                        <th className="px-6 py-4 font-medium">Produto</th>
+                        <th className="px-6 py-4 font-medium">Preço</th>
+                        <th className="px-6 py-4 font-medium">Estoque</th>
+                        <th className="px-6 py-4 font-medium text-right">Ações</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 text-sm">
+                      {produtos.map((produto) => (
+                        <tr key={produto.id} className="hover:bg-zinc-50/30 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-4">
+                              <img src={produto.imagens?.[0]?.url || produto.imgUrl} alt={produto.nome} className="w-10 h-12 object-cover rounded bg-zinc-100" />
+                              <span className="font-medium text-zinc-800">{produto.nome}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-zinc-600">R$ {produto.preco}</td>
+                          <td className="px-6 py-4 text-zinc-600">{produto.estoque || 0} un.</td>
+                          <td className="px-6 py-4 text-right space-x-3">
+                            <button onClick={() => setProdutoEditando({ ...produto })} className="text-black font-medium hover:underline text-xs tracking-wider uppercase cursor-pointer">Editar</button>
+                            <button onClick={() => setProdutoParaExcluir(produto)} className="text-red-500 font-medium hover:underline text-xs tracking-wider uppercase cursor-pointer">Excluir</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <div className="max-w-3xl mx-auto pb-20">
+                <button onClick={() => setProdutoEditando(null)} className="flex items-center gap-2 text-xs text-zinc-400 hover:text-black mb-6 uppercase tracking-wider font-medium cursor-pointer">
+                  ← Voltar para listagem
+                </button>
+
+                <header className="mb-8 flex justify-between items-center border-b border-zinc-100 pb-4">
+                  <div>
+                    <h2 className="text-2xl font-normal tracking-tight">Editar: {produtoEditando.nome}</h2>
+                  </div>
+                  <button type="button" onClick={() => setProdutoParaExcluir(produtoEditando)} className="text-red-500 text-xs font-medium uppercase tracking-wider hover:underline cursor-pointer">
+                    Excluir Produto
+                  </button>
+                </header>
+
+                <form onSubmit={salvarEdicao} className="space-y-6">
+                  
+                  <div className="bg-white p-6 rounded-lg border border-zinc-200 shadow-2xs space-y-4">
+                    <h3 className="text-xs uppercase tracking-widest text-zinc-400 font-semibold mb-2">Detalhes</h3>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-600 mb-1">Nome</label>
+                      <input type="text" value={produtoEditando.nome} onChange={(e) => setProdutoEditando({...produtoEditando, nome: e.target.value})} className="w-full border border-zinc-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-black" required />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-600 mb-1">Preço (R$)</label>
+                        <input type="text" value={produtoEditando.preco} onChange={(e) => setProdutoEditando({...produtoEditando, preco: e.target.value})} className="w-full border border-zinc-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-black" required />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-600 mb-1">Estoque</label>
+                        <input type="number" min="0" value={produtoEditando.estoque} onChange={(e) => setProdutoEditando({...produtoEditando, estoque: e.target.value})} className="w-full border border-zinc-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-black" required />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-lg border border-zinc-200 shadow-2xs">
+                    <h3 className="text-xs uppercase tracking-widest text-zinc-400 font-semibold mb-3">Cores da Peça</h3>
+                    <div className="flex flex-wrap gap-2 mb-4">
+                      {produtoEditando.cores.map((corHex, idx) => (
+                        <div key={idx} className="flex items-center gap-2 bg-zinc-50 border border-zinc-200 px-3 py-1 rounded-full text-xs">
+                          <span className="w-3 h-3 rounded-full border border-zinc-300" style={{ backgroundColor: corHex }} />
+                          <span className="font-mono text-zinc-600">{corHex}</span>
+                          <button type="button" onClick={() => removerCor(idx)} className="text-zinc-400 hover:text-red-500 font-bold ml-1 cursor-pointer">×</button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <input type="color" value={novaCorHex} onChange={(e) => setNovaCorHex(e.target.value)} className="w-9 h-9 border border-zinc-200 rounded cursor-pointer bg-white p-0.5" />
+                      <input type="text" value={novaCorHex} onChange={(e) => setNovaCorHex(e.target.value)} className="w-28 border border-zinc-200 rounded px-3 py-2 text-xs font-mono" />
+                      <button type="button" onClick={adicionarCor} className="bg-zinc-100 text-black px-4 py-2 rounded text-xs font-medium uppercase tracking-wider border border-zinc-200 hover:bg-zinc-200 cursor-pointer">Adicionar Cor</button>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-lg border border-zinc-200 shadow-2xs">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xs uppercase tracking-widest text-zinc-400 font-semibold">Galeria & Cores das Fotos</h3>
+                      <span className="text-xs text-zinc-400">{produtoEditando.imagens?.length || 0} foto(s)</span>
+                    </div>
+                    
+                    <div className="space-y-3 mb-6">
+                      {produtoEditando.imagens?.map((imgObj, index) => (
+                        <div key={index} className="flex items-center gap-4 p-3 border border-zinc-100 rounded bg-zinc-50/50">
+                          <img src={imgObj.url} alt="Miniatura" className="w-12 h-14 object-cover rounded border border-zinc-200" />
+                          
+                          <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <span className="text-xs text-zinc-500 font-medium">{index === 0 ? "Capa Principal" : `Foto ${index + 1}`}</span>
+                            
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] text-zinc-400">Cor:</label>
+                              <select 
+                                value={imgObj.cor} 
+                                onChange={(e) => atualizarCorDaImagem(index, e.target.value)}
+                                className="border border-zinc-200 rounded px-2 py-1 text-xs bg-white"
+                              >
+                                {produtoEditando.cores.map((c, i) => (
+                                  <option key={i} value={c}>{c}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={() => moverImagem(index, 'cima')} disabled={index === 0} className="p-1.5 text-xs text-zinc-500 hover:text-black disabled:opacity-30">↑</button>
+                            <button type="button" onClick={() => moverImagem(index, 'baixo')} disabled={index === produtoEditando.imagens.length - 1} className="p-1.5 text-xs text-zinc-500 hover:text-black disabled:opacity-30">↓</button>
+                            <button type="button" onClick={() => removerImagem(index)} className="p-1.5 text-xs text-red-500 hover:text-red-700 ml-1">✕</button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-3 pt-3 border-t border-zinc-100">
+                      <input type="text" placeholder="Cole o link (URL) da nova foto..." value={novaImagemLink} onChange={(e) => setNovaImagemLink(e.target.value)} className="w-full border border-zinc-200 rounded px-3 py-2 text-xs focus:outline-none focus:border-black" />
+                      <div className="flex gap-2 items-center">
+                        <span className="text-xs text-zinc-500">Pertence à cor:</span>
+                        <select value={novaImagemCor} onChange={(e) => setNovaImagemCor(e.target.value)} className="border border-zinc-200 rounded px-2 py-1 text-xs bg-white">
+                          {produtoEditando.cores.map((c, i) => (
+                            <option key={i} value={c}>{c}</option>
+                          ))}
+                        </select>
+                        <button type="button" onClick={adicionarImagem} className="bg-zinc-100 text-black px-4 py-1.5 rounded text-xs font-medium uppercase tracking-wider border border-zinc-200 hover:bg-zinc-200 cursor-pointer">Adicionar Foto</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button type="submit" className="bg-black text-white px-8 py-3 rounded text-xs font-medium tracking-widest uppercase hover:bg-zinc-800 transition-colors cursor-pointer">Salvar Alterações</button>
+                  </div>
+                </form>
+              </div>
+            )}
+          </>
         )}
 
-        {/* ABA 2: CONFIGURAÇÕES DA LOJA */}
-        {abaAtiva === 'config' && (
-          <div className="bg-white rounded-lg border border-zinc-200 p-8 max-w-2xl shadow-sm">
-            <h2 className="text-lg font-bold uppercase tracking-wider mb-6">Informações da Loja</h2>
-            <form onSubmit={salvarConfiguracoesLoja} className="space-y-6">
+        {/* ABA: CONFIGURAÇÕES DA LOJA */}
+        {abaAtiva === 'configuracoes' && (
+          <div className="max-w-2xl mx-auto">
+            <header className="mb-8">
+              <h2 className="text-2xl font-normal tracking-tight">Configurações da Loja</h2>
+              <p className="text-sm text-zinc-400 mt-0.5">Gerencie o cabeçalho, slogans e dados de atendimento.</p>
+            </header>
+
+            <form onSubmit={salvarConfiguracoes} className="bg-white p-8 rounded-lg border border-zinc-200 shadow-2xs space-y-6">
               <div>
-                <label className="text-[10px] font-bold tracking-widest uppercase text-zinc-500 block mb-2">
-                  Frase da Tarja do Topo
-                </label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Frase Personalizada (Header)</label>
                 <input 
                   type="text" 
-                  value={configLoja.fraseTopo}
-                  onChange={(e) => setConfigLoja({ ...configLoja, fraseTopo: e.target.value })}
-                  className="w-full border border-zinc-200 rounded px-4 py-3 text-xs focus:outline-none focus:border-black"
+                  value={configLoja.fraseTopo} 
+                  onChange={(e) => setConfigLoja({...configLoja, fraseTopo: e.target.value})} 
+                  className="w-full border border-zinc-200 rounded px-4 py-3 text-sm focus:outline-none focus:border-black"
+                  required 
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-bold tracking-widest uppercase text-zinc-500 block mb-2">
-                  WhatsApp da Loja (DDD + Número sem espaços)
-                </label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Número do WhatsApp para Pedidos</label>
                 <input 
                   type="text" 
-                  value={configLoja.whatsappContato}
-                  onChange={(e) => setConfigLoja({ ...configLoja, whatsappContato: e.target.value })}
-                  className="w-full border border-zinc-200 rounded px-4 py-3 text-xs focus:outline-none focus:border-black"
+                  value={configLoja.whatsappContato} 
+                  onChange={(e) => setConfigLoja({...configLoja, whatsappContato: e.target.value})} 
+                  className="w-full border border-zinc-200 rounded px-4 py-3 text-sm focus:outline-none focus:border-black"
+                  required 
                 />
+                <p className="text-xs text-zinc-400 mt-1">Insira o DDI + DDD + Número (Ex: 5511999999999)</p>
               </div>
 
-              <button type="submit" className="bg-black text-white px-8 py-3.5 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors cursor-pointer">
-                Salvar Configurações
-              </button>
+              <div className="flex justify-end pt-4 border-t border-zinc-100">
+                <button type="submit" className="bg-black text-white px-8 py-3 rounded text-xs font-medium tracking-widest uppercase hover:bg-zinc-800 transition-colors cursor-pointer">
+                  Salvar Configurações
+                </button>
+              </div>
             </form>
           </div>
         )}
+
       </main>
 
-      {/* MODAL DE EDICÃO / CADASTRO */}
-      {produtoEditando && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl my-8 overflow-hidden border border-zinc-200">
-            <div className="px-8 py-6 border-b border-zinc-100 flex justify-between items-center">
-              <h3 className="text-base font-bold uppercase tracking-wider">
-                {produtoEditando.id ? 'Editar Produto' : 'Novo Produto'}
-              </h3>
-              <button onClick={() => setProdutoEditando(null)} className="text-zinc-400 hover:text-black cursor-pointer text-xs font-bold">
-                ✕ FECHAR
-              </button>
-            </div>
-
-            <form onSubmit={salvarProduto} className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="text-[10px] font-bold tracking-widest uppercase text-zinc-500 block mb-2">Nome do Produto</label>
-                  <input 
-                    type="text" 
-                    value={produtoEditando.nome}
-                    onChange={(e) => setProdutoEditando({ ...produtoEditando, nome: e.target.value })}
-                    className="w-full border border-zinc-200 rounded px-4 py-2.5 text-xs focus:outline-none focus:border-black"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold tracking-widest uppercase text-zinc-500 block mb-2">Preço (R$)</label>
-                  <input 
-                    type="number" 
-                    step="0.01"
-                    value={produtoEditando.preco}
-                    onChange={(e) => setProdutoEditando({ ...produtoEditando, preco: e.target.value })}
-                    className="w-full border border-zinc-200 rounded px-4 py-2.5 text-xs focus:outline-none focus:border-black"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Cores Hexadecimal */}
-              <div>
-                <label className="text-[10px] font-bold tracking-widest uppercase text-zinc-500 block mb-2">Cores Disponíveis</label>
-                <div className="flex gap-2 items-center mb-3">
-                  <input 
-                    type="color" 
-                    value={novaCorHex}
-                    onChange={(e) => setNovaCorHex(e.target.value)}
-                    className="w-9 h-9 border-none cursor-pointer rounded"
-                  />
-                  <button 
-                    type="button" 
-                    onClick={adicionarCorHex}
-                    className="bg-zinc-100 hover:bg-zinc-200 px-4 py-2 rounded text-xs font-bold uppercase cursor-pointer"
-                  >
-                    + Adicionar Cor
-                  </button>
-                </div>
-
-                <div className="flex gap-2 flex-wrap">
-                  {produtoEditando.cores?.map((cor, i) => (
-                    <div key={i} className="flex items-center gap-1.5 border border-zinc-200 px-3 py-1 rounded bg-zinc-50">
-                      <span className="w-3.5 h-3.5 rounded-full border border-zinc-300" style={{ backgroundColor: cor }} />
-                      <span className="text-[10px] font-mono">{cor}</span>
-                      <button type="button" onClick={() => removerCorHex(cor)} className="text-red-500 text-xs font-bold ml-1 cursor-pointer">✕</button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Imagens URLs */}
-              <div>
-                <label className="text-[10px] font-bold tracking-widest uppercase text-zinc-500 block mb-2">Adicionar Foto (URL da Imagem)</label>
-                <div className="flex gap-2 mb-3">
-                  <input 
-                    type="text" 
-                    placeholder="https://..." 
-                    id="inputUrlImg"
-                    className="flex-1 border border-zinc-200 rounded px-4 py-2.5 text-xs focus:outline-none focus:border-black"
-                  />
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      const el = document.getElementById('inputUrlImg');
-                      if (el) {
-                        adicionarImagemUrl(el.value);
-                        el.value = '';
-                      }
-                    }}
-                    className="bg-black text-white px-5 py-2.5 rounded text-xs font-bold uppercase cursor-pointer"
-                  >
-                    Adicionar
-                  </button>
-                </div>
-
-                {/* Galeria de Fotos Adicionadas */}
-                <div className="grid grid-cols-4 gap-3 mt-4">
-                  {produtoEditando.imagens?.map((img, i) => (
-                    <div key={i} className="relative aspect-3/4 bg-zinc-100 rounded overflow-hidden border border-zinc-200 group">
-                      <img src={img.url} alt="" className="w-full h-full object-cover" />
-                      <button 
-                        type="button" 
-                        onClick={() => removerImagem(i)}
-                        className="absolute top-1 right-1 bg-red-600 text-white w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-bold cursor-pointer"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-6 border-t border-zinc-100">
-                <button type="button" onClick={() => setProdutoEditando(null)} className="px-6 py-3 rounded text-xs font-bold uppercase text-zinc-600 hover:bg-zinc-100 cursor-pointer">
-                  Cancelar
-                </button>
-                <button type="submit" className="bg-black text-white px-8 py-3 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 cursor-pointer">
-                  Salvar no Banco
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL DE CONFIRMAÇÃO DE EXCLUSÃO */}
+      {/* Modal de Exclusão */}
       {produtoParaExcluir && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-2xs p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6 text-center border border-zinc-100">
-            <h3 className="text-base font-bold text-zinc-900 mb-2 uppercase tracking-wider">Excluir Produto</h3>
-            <p className="text-xs text-zinc-500 mb-6">Deseja remover permanentemente "<strong>{produtoParaExcluir.nome}</strong>" do banco de dados?</p>
+            <h3 className="text-lg font-normal text-zinc-900 mb-2">Excluir produto</h3>
+            <p className="text-xs text-zinc-500 mb-6">Deseja remover "{produtoParaExcluir.nome}" do catálogo?</p>
             <div className="flex gap-3 justify-center">
-              <button onClick={() => setProdutoParaExcluir(null)} className="flex-1 py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded text-xs uppercase font-bold tracking-wider cursor-pointer">
-                Cancelar
-              </button>
-              <button onClick={confirmarExclusao} className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs uppercase font-bold tracking-wider cursor-pointer">
-                Excluir
-              </button>
+              <button onClick={() => setProdutoParaExcluir(null)} className="flex-1 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded text-xs uppercase tracking-wider font-medium cursor-pointer">Cancelar</button>
+              <button onClick={confirmarExclusao} className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-xs uppercase tracking-wider font-medium cursor-pointer">Excluir</button>
             </div>
           </div>
         </div>
