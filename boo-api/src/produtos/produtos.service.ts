@@ -11,20 +11,19 @@ export class ProdutosService {
     });
   }
 
-  async criarProduto(dados: {
-    nome: string;
-    preco: number;
-    esgotado?: boolean;
-    ultimaPeca?: boolean;
-    imagens?: string[];
-  }) {
+  async criarProduto(dados: any) {
     return await prisma.produto.create({
       data: {
         nome: dados.nome,
-        preco: dados.preco,
+        preco: Number(dados.preco) || 0,
+        estoque: Number(dados.estoque) || 0,
+        categoria: dados.categoria || "Geral",
         esgotado: dados.esgotado ?? false,
         ultimaPeca: dados.ultimaPeca ?? false,
-        imagens: dados.imagens ?? [],
+        // Convertemos arrays/objetos complexos para JSON String para o banco aceitar sem choro
+        imagens: dados.imagens ? JSON.stringify(dados.imagens) : "[]",
+        cores: dados.cores ? JSON.stringify(dados.cores) : "[]",
+        imgUrl: dados.imgUrl || (Array.isArray(dados.imagens) ? dados.imagens[0]?.url : "") || ""
       },
     });
   }
