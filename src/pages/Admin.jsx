@@ -36,14 +36,12 @@ export default function Admin() {
     lojaAberta: true
   });
 
-  const [mensagemSucesso, setMensagemSucesso] = useState("");
+const [toast, setToast] = useState({ show: false, msg: "", tipo: "sucesso" });
 
-  const API_URL = "http://167.148.161.90/api";
-
-  const dispararToast = (msg) => {
-    setMensagemSucesso(msg);
-    setTimeout(() => setMensagemSucesso(""), 3000);
-  };
+const dispararToast = (msg, tipo = "sucesso") => {
+  setToast({ show: true, msg, tipo });
+  setTimeout(() => setToast({ show: false, msg: "", tipo: "sucesso" }), 3500);
+};
 
   const carregarProdutos = async () => {
     try {
@@ -250,12 +248,16 @@ export default function Admin() {
   return (
     <div className="flex h-screen bg-zinc-50 text-zinc-900 font-sans relative overflow-hidden">
       
-      {mensagemSucesso && (
-        <div className="fixed top-6 right-6 z-50 bg-black text-white px-6 py-3 rounded-lg shadow-xl text-xs uppercase tracking-widest font-medium flex items-center gap-2">
-          <FiCheckCircle className="text-emerald-400 text-base" />
-          {mensagemSucesso}
-        </div>
-      )}
+{toast.show && (
+  <div className={`fixed top-6 right-6 z-50 text-white px-6 py-3 rounded-lg shadow-xl text-xs uppercase tracking-widest font-medium flex items-center gap-2 transition-all ${toast.tipo === 'erro' ? 'bg-red-600' : 'bg-black'}`}>
+    {toast.tipo === 'erro' ? (
+      <FiAlertTriangle className="text-white text-base" />
+    ) : (
+      <FiCheckCircle className="text-emerald-400 text-base" />
+    )}
+    {toast.msg}
+  </div>
+)}
 
       {/* SIDEBAR COM HEADER CENTRALIZADO COMO ANTES */}
       <aside className="w-64 bg-white border-r border-zinc-200 flex flex-col justify-between flex-shrink-0 p-6">
