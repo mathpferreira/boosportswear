@@ -1,17 +1,17 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { json, urlencoded } from 'express';
+import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
-  // 1. DESLIGAMOS O LIMITADOR PADRÃO AQUI (bodyParser: false)
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  // Tiramos o bodyParser: false daqui e deixamos o padrão
+  const app = await NestFactory.create(AppModule);
   
   app.enableCors();
   app.setGlobalPrefix('api');
 
-  // 2. ATIVAMOS A NOSSA REGRA DE 50MB AQUI
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ extended: true, limit: '50mb' }));
+  // Forçando os 50MB com o pacote nativo body-parser
+  app.use(bodyParser.json({ limit: '50mb' }));
+  app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
   await app.listen(3000);
 }
