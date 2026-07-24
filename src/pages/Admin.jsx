@@ -38,6 +38,8 @@ export default function Admin() {
 
 const [toast, setToast] = useState({ show: false, msg: "", tipo: "sucesso" });
 
+const API_URL = "http://167.148.161.90/api";
+
 const dispararToast = (msg, tipo = "sucesso") => {
   setToast({ show: true, msg, tipo });
   setTimeout(() => setToast({ show: false, msg: "", tipo: "sucesso" }), 3500);
