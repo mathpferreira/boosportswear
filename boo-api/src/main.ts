@@ -7,8 +7,8 @@ async function bootstrap() {
   
   app.enableCors();
   
-  // ❌ APAGUE OU COMENTE ESTA LINHA:
-  // app.setGlobalPrefix('api'); 
+  // 🔥 AQUI ESTÁ O SEGREDO: O prefixo global 'api' obrigatoriamente alinhado com o Frontend
+  app.setGlobalPrefix('api');
 
   app.use(bodyParser.json({ limit: '50mb' }));
   app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));

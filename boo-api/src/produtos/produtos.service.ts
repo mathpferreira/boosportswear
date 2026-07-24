@@ -12,6 +12,17 @@ export class ProdutosService {
   }
 
   async criarProduto(dados: any) {
+    // Garantimos que imagens e cores sejam passados no formato correto que o Prisma aceita
+    let imagensTratadas = dados.imagens;
+    if (typeof imagensTratadas === 'string') {
+      try { imagensTratadas = JSON.parse(imagensTratadas); } catch { imagensTratadas = []; }
+    }
+
+    let coresTratadas = dados.cores;
+    if (typeof coresTratadas === 'string') {
+      try { coresTratadas = JSON.parse(coresTratadas); } catch { coresTratadas = []; }
+    }
+
     return await prisma.produto.create({
       data: {
         nome: dados.nome,
@@ -20,10 +31,9 @@ export class ProdutosService {
         categoria: dados.categoria || "Geral",
         esgotado: dados.esgotado ?? false,
         ultimaPeca: dados.ultimaPeca ?? false,
-        // Convertemos arrays/objetos complexos para JSON String para o banco aceitar sem choro
-        imagens: dados.imagens ? JSON.stringify(dados.imagens) : "[]",
-        cores: dados.cores ? JSON.stringify(dados.cores) : "[]",
-        imgUrl: dados.imgUrl || (Array.isArray(dados.imagens) ? dados.imagens[0]?.url : "") || ""
+        imagens: imagensTratadas ?? [],
+        cores: coresTratadas ?? [],
+        imgUrl: dados.imgUrl || (Array.isArray(imagensTratadas) && imagensTratadas.length > 0 ? imagensTratadas[0]?.url : "") || ""
       },
     });
   }
