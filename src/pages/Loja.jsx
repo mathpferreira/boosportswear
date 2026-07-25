@@ -378,9 +378,7 @@ export default function Loja() {
       {/* Hero Section */}
       <section className="relative h-[70vh] bg-zinc-900 flex items-center justify-center text-center text-white px-6">
         <div className="max-w-2xl space-y-4">
-          <span className="text-xs tracking-[0.4em] uppercase text-zinc-400">Nova Coleção</span>
           <h2 className="text-4xl md:text-6xl font-black tracking-tight uppercase">Performance & Estilo</h2>
-          <p className="text-xs text-zinc-300 tracking-widest uppercase font-light">Peças desenhadas para alta performance e conforto absoluto.</p>
         </div>
       </section>
 
@@ -388,7 +386,7 @@ export default function Loja() {
       <main id="catalogo" className="max-w-7xl mx-auto px-6 py-20">
         <div className="flex flex-col gap-6 mb-12 border-b border-zinc-100 pb-6">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-bold tracking-[0.2em] uppercase">Catálogo Oficial</h3>
+            <h3 className="text-sm font-bold tracking-[0.2em] uppercase">Catálogo</h3>
             <span className="text-xs text-zinc-400">{produtosFiltrados.length} produtos disponíveis</span>
           </div>
 
