@@ -1,4 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
+import {
+  FiUser, FiSearch, FiShoppingBag, FiMenu, FiX,
+  FiChevronLeft, FiChevronRight, FiInstagram, FiMail, FiTruck
+} from 'react-icons/fi';
 
 export default function Loja() {
   const [produtosBrazilian, setProdutosBrazilian] = useState([]);
@@ -6,6 +10,7 @@ export default function Loja() {
 
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
   const [tamanhoEscolhido, setTamanhoEscolhido] = useState("M");
+  const [indiceImagemModal, setIndiceImagemModal] = useState(0);
   const [carrinho, setCarrinho] = useState([]);
   const [isSacolaAberta, setIsSacolaAberta] = useState(false);
   const [etapaSacola, setEtapaSacola] = useState("carrinho"); // carrinho | checkout | confirmado
@@ -38,9 +43,13 @@ export default function Loja() {
   const [erroPedido, setErroPedido] = useState(null);
   const [numeroPedido, setNumeroPedido] = useState(null);
 
-  // Configurações da Loja (controladas pelo /admin)
-  const [fraseTopo, setFraseTopo] = useState("FRETE GRÁTIS A PARTIR DE R$ 250 • PARCELAMENTO EM ATÉ 3X SEM JUROS");
-  const [whatsappLoja, setWhatsappLoja] = useState("5511999999999");
+  // Configurações da Loja — mesmos campos definidos no /admin (aba Configurações)
+  const [configLoja, setConfigLoja] = useState({
+    fraseTopo: "FRETE GRÁTIS A PARTIR DE R$ 250 • PARCELAMENTO EM ATÉ 3X SEM JUROS",
+    instagramUrl: "https://instagram.com/boosportswear",
+    emailSuporte: "contato@boosportswear.com.br",
+    lojaAberta: true
+  });
 
   // URL Base do Backend na sua VPS Debian
   const API_URL = "http://167.148.161.90/api";
@@ -60,15 +69,14 @@ export default function Loja() {
     carregarProdutos();
   }, []);
 
-  // Puxa a frase do topo e o WhatsApp da loja direto do /admin
+  // Puxa as configurações salvas no /admin (mesma rota usada por Admin.jsx)
   useEffect(() => {
     async function carregarConfiguracoes() {
       try {
         const resposta = await fetch(`${API_URL}/configuracoes`);
         if (resposta.ok) {
           const dados = await resposta.json();
-          if (dados.fraseTopo) setFraseTopo(dados.fraseTopo);
-          if (dados.whatsappLoja) setWhatsappLoja(dados.whatsappLoja);
+          setConfigLoja(prev => ({ ...prev, ...dados }));
         }
       } catch (erro) {
         console.error("Erro ao carregar configurações:", erro);
@@ -101,14 +109,18 @@ export default function Loja() {
       ...prev,
       [produtoId]: cor
     }));
+    setIndiceImagemModal(0);
   };
 
   const abrirModalProduto = (produto) => {
     setProdutoSelecionado(produto);
     setTamanhoEscolhido("M");
+    setIndiceImagemModal(0);
   };
 
   const adicionarAoCarrinho = (produto, tamanho, cor) => {
+    if (!configLoja.lojaAberta) return;
+
     const item = {
       ...produto,
       tamanhoEscolhido: tamanho,
@@ -132,8 +144,7 @@ export default function Loja() {
     setCarrinho(prev => prev.filter(item => item.cartId !== cartId));
   };
 
-  const calcularFrete = (e) => {
-    e.preventDefault();
+  const calcularFrete = () => {
     if (!cep || cep.length < 8) return;
     setFreteResultado({
       valor: 19.90,
@@ -228,11 +239,24 @@ export default function Loja() {
   const inputClasses = "w-full border border-zinc-200 rounded px-3 py-2 text-xs focus:outline-none focus:border-black";
   const labelClasses = "text-[10px] font-bold tracking-widest uppercase text-zinc-400 block mb-1.5";
 
+  // Imagens do produto aberto no modal, filtradas pela cor selecionada (fallback: todas)
+  const corAtivaModal = produtoSelecionado
+    ? (corSelecionadaPorProduto[produtoSelecionado.id] || produtoSelecionado.cores?.[0])
+    : null;
+  const imagensModal = produtoSelecionado
+    ? (() => {
+        const porCor = produtoSelecionado.imagens?.filter(img => img.cor === corAtivaModal) || [];
+        if (porCor.length > 0) return porCor;
+        if (produtoSelecionado.imagens?.length > 0) return produtoSelecionado.imagens;
+        return [{ url: produtoSelecionado.imgUrl }];
+      })()
+    : [];
+
   return (
     <div className="min-h-screen bg-white text-zinc-900 font-sans antialiased">
       {/* Tarja do Topo — controlada pelo /admin */}
-      <div className="bg-black text-white text-[10px] tracking-[0.2em] py-2.5 px-4 text-center font-medium uppercase">
-        {fraseTopo}
+      <div className={`text-white text-[10px] tracking-[0.2em] py-2.5 px-4 text-center font-medium uppercase ${configLoja.lojaAberta ? "bg-black" : "bg-zinc-700"}`}>
+        {configLoja.lojaAberta ? configLoja.fraseTopo : "LOJA TEMPORARIAMENTE FECHADA PARA NOVOS PEDIDOS"}
       </div>
 
       {/* Header */}
@@ -241,10 +265,10 @@ export default function Loja() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsMenuAberto(v => !v)}
-              className="md:hidden text-lg leading-none cursor-pointer hover:opacity-75 transition-opacity"
+              className="md:hidden cursor-pointer hover:opacity-75 transition-opacity"
               aria-label="Abrir menu"
             >
-              {isMenuAberto ? "✕" : "☰"}
+              {isMenuAberto ? <FiX className="text-lg" /> : <FiMenu className="text-lg" />}
             </button>
             <h1 className="text-2xl font-black tracking-[0.3em] uppercase">BOO</h1>
           </div>
@@ -284,28 +308,37 @@ export default function Loja() {
               ) : (
                 <button
                   onClick={() => setIsBuscaAberta(true)}
-                  className="text-sm cursor-pointer hover:opacity-75 transition-opacity"
+                  className="cursor-pointer hover:opacity-75 transition-opacity"
                   aria-label="Buscar"
                 >
-                  ⌕
+                  <FiSearch className="text-base" />
                 </button>
               )}
             </div>
 
             <button
               onClick={() => usuarioLogado ? handleLogout() : setIsLoginAberto(true)}
-              className="text-[11px] font-bold uppercase tracking-widest cursor-pointer hover:opacity-75 transition-opacity whitespace-nowrap"
+              className="cursor-pointer hover:opacity-75 transition-opacity"
+              aria-label={usuarioLogado ? "Sair da conta" : "Entrar"}
+              title={usuarioLogado ? `${usuarioLogado.nome || usuarioLogado.email} — clique para sair` : "Entrar"}
             >
-              {usuarioLogado ? `Olá, ${(usuarioLogado.nome || usuarioLogado.email || "").split(" ")[0]}` : "Entrar"}
+              {usuarioLogado ? (
+                <span className="w-6 h-6 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center">
+                  {(usuarioLogado.nome || usuarioLogado.email || "?").charAt(0).toUpperCase()}
+                </span>
+              ) : (
+                <FiUser className="text-base" />
+              )}
             </button>
 
             <button
               onClick={() => setIsSacolaAberta(true)}
               className="relative cursor-pointer hover:opacity-75 transition-opacity"
+              aria-label="Sacola"
             >
-              <span className="text-xs tracking-widest font-bold uppercase">Sacola</span>
+              <FiShoppingBag className="text-base" />
               {carrinho.length > 0 && (
-                <span className="absolute -top-2 -right-3 bg-black text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                <span className="absolute -top-2 -right-2 bg-black text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
                   {carrinho.reduce((a, b) => a + b.quantidade, 0)}
                 </span>
               )}
@@ -437,23 +470,66 @@ export default function Loja() {
       {/* Modal de Detalhes do Produto */}
       {produtoSelecionado && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white w-full max-w-3xl rounded-lg overflow-hidden shadow-2xl flex flex-col md:flex-row relative">
+          <div className="bg-white w-full max-w-3xl rounded-lg overflow-hidden shadow-2xl flex flex-col md:flex-row relative max-h-[90vh]">
             <button
               onClick={() => setProdutoSelecionado(null)}
-              className="absolute top-4 right-4 z-10 w-8 h-8 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-600 hover:bg-zinc-200 cursor-pointer text-xs"
+              className="absolute top-4 right-4 z-10 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center text-zinc-600 hover:bg-zinc-100 cursor-pointer"
             >
-              ✕
+              <FiX />
             </button>
 
-            <div className="md:w-1/2 aspect-3/4 bg-zinc-100">
-              <img
-                src={produtoSelecionado.imagens?.[0]?.url || produtoSelecionado.imgUrl}
-                alt={produtoSelecionado.nome}
-                className="w-full h-full object-cover"
-              />
+            {/* Galeria — thumbnails + imagem principal com navegação, estilo Mercado Livre */}
+            <div className="md:w-1/2 flex overflow-hidden">
+              {imagensModal.length > 1 && (
+                <div className="hidden md:flex flex-col gap-2 p-4 overflow-y-auto">
+                  {imagensModal.map((img, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setIndiceImagemModal(i)}
+                      className={`w-14 h-14 rounded overflow-hidden border-2 flex-shrink-0 cursor-pointer transition-colors ${indiceImagemModal === i ? "border-black" : "border-transparent opacity-60 hover:opacity-100"}`}
+                    >
+                      <img src={img.url} alt="" className="w-full h-full object-cover" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="relative flex-1 aspect-3/4 bg-zinc-100">
+                <img
+                  src={imagensModal[indiceImagemModal]?.url}
+                  alt={produtoSelecionado.nome}
+                  className="w-full h-full object-cover"
+                />
+                {imagensModal.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setIndiceImagemModal(prev => (prev - 1 + imagensModal.length) % imagensModal.length)}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center hover:bg-white cursor-pointer"
+                      aria-label="Imagem anterior"
+                    >
+                      <FiChevronLeft />
+                    </button>
+                    <button
+                      onClick={() => setIndiceImagemModal(prev => (prev + 1) % imagensModal.length)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center hover:bg-white cursor-pointer"
+                      aria-label="Próxima imagem"
+                    >
+                      <FiChevronRight />
+                    </button>
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
+                      {imagensModal.map((_, i) => (
+                        <span
+                          key={i}
+                          className={`w-1.5 h-1.5 rounded-full ${indiceImagemModal === i ? "bg-black" : "bg-white border border-zinc-300"}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
-            <div className="md:w-1/2 p-8 flex flex-col justify-between">
+            <div className="md:w-1/2 p-8 flex flex-col justify-between overflow-y-auto">
               <div className="space-y-6">
                 <div>
                   {produtoSelecionado.categoria && (
@@ -465,8 +541,24 @@ export default function Loja() {
                   </p>
                 </div>
 
+                {produtoSelecionado.cores && produtoSelecionado.cores.length > 0 && (
+                  <div>
+                    <label className={labelClasses}>Cor</label>
+                    <div className="flex gap-2">
+                      {produtoSelecionado.cores.map((cor, i) => (
+                        <button
+                          key={i}
+                          onClick={() => selecionarCor(produtoSelecionado.id, cor)}
+                          style={{ backgroundColor: cor }}
+                          className={`w-6 h-6 rounded-full border-2 cursor-pointer transition-all ${corAtivaModal === cor ? "border-black scale-110" : "border-zinc-200"}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div>
-                  <label className="text-[10px] font-bold tracking-widest uppercase text-zinc-400 block mb-2">Tamanho</label>
+                  <label className={labelClasses}>Tamanho</label>
                   <div className="flex gap-2">
                     {["PP", "P", "M", "G", "GG"].map(tam => (
                       <button
@@ -481,13 +573,39 @@ export default function Loja() {
                     ))}
                   </div>
                 </div>
+
+                <div>
+                  <label className={labelClasses}>Calcular Frete</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="00000-000"
+                      value={cep}
+                      onChange={(e) => setCep(e.target.value)}
+                      className={inputClasses}
+                    />
+                    <button
+                      type="button"
+                      onClick={calcularFrete}
+                      className="flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 px-4 py-2 rounded text-xs font-bold uppercase cursor-pointer whitespace-nowrap"
+                    >
+                      <FiTruck /> OK
+                    </button>
+                  </div>
+                  {freteResultado && (
+                    <p className="text-[10px] text-green-600 font-bold uppercase mt-2">
+                      Frete: R$ {freteResultado.valor.toFixed(2)} ({freteResultado.prazo})
+                    </p>
+                  )}
+                </div>
               </div>
 
               <button
                 onClick={() => adicionarAoCarrinho(produtoSelecionado, tamanhoEscolhido, corSelecionadaPorProduto[produtoSelecionado.id])}
-                className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors mt-8 cursor-pointer"
+                disabled={!configLoja.lojaAberta}
+                className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors mt-8 cursor-pointer disabled:bg-zinc-300 disabled:cursor-not-allowed"
               >
-                Adicionar à Sacola
+                {configLoja.lojaAberta ? "Adicionar à Sacola" : "Loja Fechada no Momento"}
               </button>
             </div>
           </div>
@@ -500,9 +618,9 @@ export default function Loja() {
           <div className="bg-white w-full max-w-sm rounded-lg shadow-2xl p-8 relative">
             <button
               onClick={() => setIsLoginAberto(false)}
-              className="absolute top-4 right-4 w-8 h-8 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-600 hover:bg-zinc-200 cursor-pointer text-xs"
+              className="absolute top-4 right-4 w-8 h-8 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-600 hover:bg-zinc-200 cursor-pointer"
             >
-              ✕
+              <FiX className="text-xs" />
             </button>
 
             <h3 className="text-sm font-bold tracking-widest uppercase mb-6">Entrar na sua conta</h3>
@@ -561,7 +679,9 @@ export default function Loja() {
                   {etapaSacola === "checkout" && "Dados de Entrega"}
                   {etapaSacola === "confirmado" && "Pedido Confirmado"}
                 </h3>
-                <button onClick={fecharSacola} className="text-xs text-zinc-400 hover:text-black cursor-pointer">✕ FECHAR</button>
+                <button onClick={fecharSacola} className="text-zinc-400 hover:text-black cursor-pointer">
+                  <FiX />
+                </button>
               </div>
 
               {/* Etapa 1 — Carrinho */}
@@ -587,37 +707,26 @@ export default function Loja() {
                   </div>
 
                   {carrinho.length > 0 && (
-                    <form onSubmit={calcularFrete} className="pt-4 border-t border-zinc-100">
-                      <label className={labelClasses}>Simular Frete</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder="00000-000"
-                          value={cep}
-                          onChange={(e) => setCep(e.target.value)}
-                          className="flex-1 border border-zinc-200 rounded px-3 py-2 text-xs focus:outline-none focus:border-black"
-                        />
-                        <button type="submit" className="bg-zinc-100 hover:bg-zinc-200 px-4 py-2 rounded text-xs font-bold uppercase cursor-pointer">
-                          OK
-                        </button>
-                      </div>
-                      {freteResultado && (
-                        <p className="text-[10px] text-green-600 font-bold uppercase mt-2">
-                          Frete Fixo: R$ {freteResultado.valor.toFixed(2)} ({freteResultado.prazo})
-                        </p>
-                      )}
-                    </form>
-                  )}
-
-                  {carrinho.length > 0 && (
-                    <div className="mt-auto pt-6 border-t border-zinc-100 space-y-4 bg-zinc-50 p-4 rounded">
-                      <div className="flex justify-between text-sm font-bold">
-                        <span>Subtotal:</span>
+                    <div className="mt-auto pt-6 border-t border-zinc-100 space-y-3 bg-zinc-50 p-4 rounded">
+                      <div className="flex justify-between text-xs text-zinc-500 uppercase tracking-wide">
+                        <span>Subtotal</span>
                         <span>R$ {totalCarrinho.toFixed(2).replace('.', ',')}</span>
+                      </div>
+                      {freteResultado ? (
+                        <div className="flex justify-between text-xs text-zinc-500 uppercase tracking-wide">
+                          <span>Frete</span>
+                          <span>R$ {freteResultado.valor.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                      ) : (
+                        <p className="text-[10px] text-zinc-400 uppercase tracking-wide">Frete calculado na página do produto</p>
+                      )}
+                      <div className="flex justify-between text-sm font-bold pt-2 border-t border-zinc-200">
+                        <span>Total</span>
+                        <span>R$ {totalComFrete.toFixed(2).replace('.', ',')}</span>
                       </div>
                       <button
                         onClick={irParaEntrega}
-                        className="w-full bg-black text-white py-3.5 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors cursor-pointer"
+                        className="w-full bg-black text-white py-3.5 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors cursor-pointer mt-2"
                       >
                         Continuar para Entrega
                       </button>
@@ -745,17 +854,17 @@ export default function Loja() {
       {/* Footer */}
       <footer className="bg-black text-white py-16 mt-20 border-t border-zinc-900">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
-          <div className="space-y-2 text-center md:text-left">
+          <div className="space-y-3 text-center md:text-left">
             <h4 className="text-xl font-black tracking-[0.3em] uppercase">BOO</h4>
             <p className="text-xs text-zinc-400 font-light tracking-widest uppercase">ALTA QUALIDADE E ESTILO LUXUOSO</p>
-            <a
-              href={`https://wa.me/${whatsappLoja}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-block text-[10px] text-zinc-500 tracking-widest uppercase hover:text-white transition-colors mt-2"
-            >
-              Dúvidas? Fale conosco
-            </a>
+            <div className="flex items-center justify-center md:justify-start gap-4 pt-1">
+              <a href={configLoja.instagramUrl} target="_blank" rel="noreferrer" className="text-zinc-400 hover:text-white transition-colors" aria-label="Instagram">
+                <FiInstagram />
+              </a>
+              <a href={`mailto:${configLoja.emailSuporte}`} className="text-zinc-400 hover:text-white transition-colors" aria-label="E-mail">
+                <FiMail />
+              </a>
+            </div>
           </div>
           <div className="text-center md:text-right text-xs text-zinc-400 tracking-wider">
             © BOO SPORTWEAR. TODOS OS DIREITOS RESERVADOS.
