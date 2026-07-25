@@ -71,10 +71,9 @@ const dispararToast = (msg, tipo = "sucesso") => {
   };
 
   // Busca as categorias cadastradas no backend (NestJS + Prisma)
-  // Ajuste o endpoint abaixo caso a rota real seja diferente (ex: `${API_URL}/categorias`)
   const carregarCategorias = async () => {
     try {
-      const res = await fetch(`${API_URL}/categories`);
+      const res = await fetch(`${API_URL}/categorias`);
       if (res.ok) {
         const data = await res.json();
         setCategorias(data);
@@ -273,7 +272,7 @@ const handleFileUpload = async (e) => {
     }
 
     try {
-      const res = await fetch(`${API_URL}/categories`, {
+      const res = await fetch(`${API_URL}/categorias`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome })
@@ -296,7 +295,7 @@ const handleFileUpload = async (e) => {
     if (!categoriaEditando || !categoriaEditando.nome.trim()) return;
 
     try {
-      const res = await fetch(`${API_URL}/categories/${categoriaEditando.id}`, {
+      const res = await fetch(`${API_URL}/categorias/${categoriaEditando.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nome: categoriaEditando.nome.trim() })
@@ -319,7 +318,7 @@ const handleFileUpload = async (e) => {
     if (!categoriaParaExcluir) return;
 
     try {
-      const res = await fetch(`${API_URL}/categories/${categoriaParaExcluir.id}`, { method: 'DELETE' });
+      const res = await fetch(`${API_URL}/categorias/${categoriaParaExcluir.id}`, { method: 'DELETE' });
       if (res.ok) {
         setCategorias(categorias.filter(c => c.id !== categoriaParaExcluir.id));
         dispararToast("Categoria excluída com sucesso!");
@@ -338,7 +337,7 @@ const handleFileUpload = async (e) => {
   // no backend e cai para uma lista padrão caso ainda não tenha sido carregada.
   const nomesCategorias = categorias.length > 0 
     ? categorias.map(c => c.nome) 
-    : ["Conjuntos", "Regatas", "Shorts", "Leggings"];
+    : ["Conjuntos"];
 
   // Filtragem e Paginação
   const produtosFiltrados = produtos.filter(produto => {
