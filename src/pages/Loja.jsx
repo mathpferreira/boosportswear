@@ -103,7 +103,7 @@ export default function Loja() {
   // Configurações da Loja
   const [configLoja, setConfigLoja] = useState({
     fraseTopo: "FRETE GRÁTIS A PARTIR DE R$ 250 • PARCELAMENTO EM ATÉ 3X SEM JUROS",
-    instagramUrl: "https://instagram.com/boosportswear",
+    instagramUrl: "https://instagram.com/boosportwear",
     emailSuporte: "contato@boosportswear.com.br",
     lojaAberta: true
   });
@@ -524,7 +524,7 @@ export default function Loja() {
 
               {produtosRelacionados.length > 0 && (
                 <div className="mt-24 border-t border-zinc-100 pt-16">
-                  <h3 className="text-xl font-black tracking-[0.2em] uppercase text-center mb-10">Você também pode gostar</h3>
+                  <h3 className="text-xl font-black tracking-[0.2em] uppercase text-center mb-10">Produtos Relacionados</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
                     {produtosRelacionados.map((item) => (
                       <CardProduto key={item.id} produto={item} onAbrir={abrirProduto} />
@@ -631,7 +631,7 @@ export default function Loja() {
             </button>
             
             <h3 className="text-sm font-bold tracking-widest uppercase mb-1">
-              {isRegistro ? "Criar nova conta" : "Entrar na sua conta"}
+              {isRegistro ? "Criar nova conta" : "Entrar"}
             </h3>
             <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-6">
               {isRegistro ? "Preencha seus dados abaixo" : "Bem-vindo de volta"}
