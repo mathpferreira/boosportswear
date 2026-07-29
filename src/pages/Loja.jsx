@@ -1,19 +1,73 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   FiUser, FiSearch, FiShoppingBag, FiMenu, FiX,
-  FiChevronLeft, FiChevronRight, FiInstagram, FiMail, FiTruck
+  FiInstagram, FiMail
 } from 'react-icons/fi';
 
+// COMPONENTE: Card do Produto
+function CardProduto({ produto, onAbrir }) {
+  const [imgIndex, setImgIndex] = useState(0);
+  const [isHovered, setIsHovered] = useState(false);
+
+  const fotos = produto.imagens?.length > 0 ? produto.imagens : [{ url: produto.imgUrl }];
+
+  useEffect(() => {
+    let timer;
+    if (isHovered && fotos.length > 1) {
+      timer = setInterval(() => {
+        setImgIndex((prev) => (prev + 1) % fotos.length);
+      }, 1200);
+    } else {
+      setImgIndex(0);
+    }
+    return () => clearInterval(timer);
+  }, [isHovered, fotos.length]);
+
+  return (
+    <div 
+      className="group cursor-pointer flex flex-col justify-between h-full"
+      onMouseEnter={() => setIsHovered(true)} 
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div 
+        onClick={() => onAbrir(produto)} 
+        className="aspect-[3/4] bg-zinc-100 rounded overflow-hidden mb-4 relative"
+      >
+        <img 
+          src={fotos[imgIndex]?.url || produto.imgUrl} 
+          alt={produto.nome} 
+          className="w-full h-full object-cover group-hover:scale-105 transition-all duration-500" 
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        {produto.categoria && (
+          <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">{produto.categoria}</p>
+        )}
+        <h4 onClick={() => onAbrir(produto)} className="text-xs font-semibold uppercase tracking-wider text-zinc-800 hover:text-black">
+          {produto.nome}
+        </h4>
+        <p className="text-xs font-bold text-zinc-900">
+          R$ {Number(produto.preco).toFixed(2).replace('.', ',')}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// COMPONENTE PRINCIPAL: Loja
 export default function Loja() {
   const [produtosBrazilian, setProdutosBrazilian] = useState([]);
-  const [corSelecionadaPorProduto, setCorSelecionadaPorProduto] = useState({});
+  
+  // Controle de visão
+  const [visaoAtual, setVisaoAtual] = useState('home'); 
 
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
   const [tamanhoEscolhido, setTamanhoEscolhido] = useState("M");
   const [indiceImagemModal, setIndiceImagemModal] = useState(0);
+  
   const [carrinho, setCarrinho] = useState([]);
-  const [isSacolaAberta, setIsSacolaAberta] = useState(false);
-  const [etapaSacola, setEtapaSacola] = useState("carrinho"); // carrinho | checkout | confirmado
+  const [etapaSacola, setEtapaSacola] = useState("carrinho");
   const [cep, setCep] = useState("");
   const [freteResultado, setFreteResultado] = useState(null);
 
@@ -22,11 +76,14 @@ export default function Loja() {
   const [termoBusca, setTermoBusca] = useState("");
   const [isBuscaAberta, setIsBuscaAberta] = useState(false);
 
-  // Menu mobile
+  // Menu mobile e Menu do Usuário
   const [isMenuAberto, setIsMenuAberto] = useState(false);
+  const [isUserMenuAberto, setIsUserMenuAberto] = useState(false); 
 
-  // Login
+  // Login e Cadastro (Lógica Integrada do Login.jsx)
   const [isLoginAberto, setIsLoginAberto] = useState(false);
+  const [isRegistro, setIsRegistro] = useState(false); 
+  const [nomeRegistro, setNomeRegistro] = useState(""); 
   const [emailLogin, setEmailLogin] = useState("");
   const [senhaLogin, setSenhaLogin] = useState("");
   const [usuarioLogado, setUsuarioLogado] = useState(null);
@@ -43,7 +100,7 @@ export default function Loja() {
   const [erroPedido, setErroPedido] = useState(null);
   const [numeroPedido, setNumeroPedido] = useState(null);
 
-  // Configurações da Loja — mesmos campos definidos no /admin (aba Configurações)
+  // Configurações da Loja
   const [configLoja, setConfigLoja] = useState({
     fraseTopo: "FRETE GRÁTIS A PARTIR DE R$ 250 • PARCELAMENTO EM ATÉ 3X SEM JUROS",
     instagramUrl: "https://instagram.com/boosportswear",
@@ -51,8 +108,15 @@ export default function Loja() {
     lojaAberta: true
   });
 
-  // URL Base do Backend na sua VPS Debian
   const API_URL = "http://167.148.161.90/api";
+
+  // 1. CARREGAR USUÁRIO SALVO (Mantém logado ao dar F5)
+  useEffect(() => {
+    const usuarioSalvo = localStorage.getItem('usuario');
+    if (usuarioSalvo) {
+      setUsuarioLogado(JSON.parse(usuarioSalvo));
+    }
+  }, []);
 
   useEffect(() => {
     async function carregarProdutos() {
@@ -69,7 +133,6 @@ export default function Loja() {
     carregarProdutos();
   }, []);
 
-  // Puxa as configurações salvas no /admin (mesma rota usada por Admin.jsx)
   useEffect(() => {
     async function carregarConfiguracoes() {
       try {
@@ -85,7 +148,6 @@ export default function Loja() {
     carregarConfiguracoes();
   }, []);
 
-  // Lista de categorias vinda dos próprios produtos cadastrados no /admin
   const categorias = useMemo(() => {
     return [...new Set(produtosBrazilian.map(p => p.categoria).filter(Boolean))];
   }, [produtosBrazilian]);
@@ -98,34 +160,28 @@ export default function Loja() {
     });
   }, [produtosBrazilian, categoriaAtiva, termoBusca]);
 
-  const selecionarCategoria = (cat) => {
-    setCategoriaAtiva(cat);
-    setIsMenuAberto(false);
-    document.getElementById("catalogo")?.scrollIntoView({ behavior: "smooth" });
-  };
+  const produtosRelacionados = useMemo(() => {
+    if (!produtoSelecionado) return [];
+    return produtosBrazilian
+      .filter(p => p.categoria === produtoSelecionado.categoria && p.id !== produtoSelecionado.id)
+      .slice(0, 4);
+  }, [produtoSelecionado, produtosBrazilian]);
 
-  const selecionarCor = (produtoId, cor) => {
-    setCorSelecionadaPorProduto(prev => ({
-      ...prev,
-      [produtoId]: cor
-    }));
-    setIndiceImagemModal(0);
-  };
-
-  const abrirModalProduto = (produto) => {
+  const abrirProduto = (produto) => {
     setProdutoSelecionado(produto);
     setTamanhoEscolhido("M");
     setIndiceImagemModal(0);
+    setVisaoAtual('produto');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const adicionarAoCarrinho = (produto, tamanho, cor) => {
+  const adicionarAoCarrinho = (produto, tamanho) => {
     if (!configLoja.lojaAberta) return;
 
     const item = {
       ...produto,
       tamanhoEscolhido: tamanho,
-      corEscolhida: cor || produto.cores[0],
-      cartId: `${produto.id}-${tamanho}-${cor || produto.cores[0]}`
+      cartId: `${produto.id}-${tamanho}`
     };
 
     setCarrinho(prev => {
@@ -136,8 +192,8 @@ export default function Loja() {
       return [...prev, { ...item, quantidade: 1 }];
     });
 
-    setProdutoSelecionado(null);
-    setIsSacolaAberta(true);
+    setVisaoAtual('carrinho');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const removerDoCarrinho = (cartId) => {
@@ -146,19 +202,11 @@ export default function Loja() {
 
   const calcularFrete = () => {
     if (!cep || cep.length < 8) return;
-    setFreteResultado({
-      valor: 19.90,
-      prazo: "3 a 5 dias úteis"
-    });
+    setFreteResultado({ valor: 19.90, prazo: "3 a 5 dias úteis" });
   };
 
   const totalCarrinho = carrinho.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
   const totalComFrete = totalCarrinho + (freteResultado?.valor || 0);
-
-  const fecharSacola = () => {
-    setIsSacolaAberta(false);
-    if (etapaSacola !== "confirmado") setEtapaSacola("carrinho");
-  };
 
   const irParaEntrega = () => {
     if (usuarioLogado) {
@@ -198,8 +246,7 @@ export default function Loja() {
       setCarrinho([]);
       setEtapaSacola("confirmado");
     } catch (erro) {
-      console.error("Erro ao finalizar pedido:", erro);
-      setErroPedido("Não foi possível concluir o pedido agora. Tente novamente em instantes.");
+      setErroPedido("Não foi possível concluir o pedido agora. Tente novamente.");
     } finally {
       setEnviandoPedido(false);
     }
@@ -208,648 +255,427 @@ export default function Loja() {
   const reiniciarSacola = () => {
     setEtapaSacola("carrinho");
     setNumeroPedido(null);
-    setIsSacolaAberta(false);
+    setVisaoAtual('home');
   };
 
-  const handleLogin = async (e) => {
+  const logout = () => {
+    setUsuarioLogado(null);
+    setIsUserMenuAberto(false);
+    localStorage.removeItem('token');
+    localStorage.removeItem('usuario');
+  };
+
+  // ==========================================
+  // LÓGICA DE AUTENTICAÇÃO IMPORTADA DO LOGIN.JSX
+  // ==========================================
+  const handleAuth = async (e) => {
     e.preventDefault();
     setCarregandoLogin(true);
     setErroLogin(null);
+
+    // BLINDAGEM E VALIDAÇÕES DO FORMULÁRIO
+    if (isRegistro) {
+      const palavrasNome = nomeRegistro.trim().split(/\s+/);
+      if (palavrasNome.length < 2) {
+        setErroLogin('Por favor, insira seu nome e sobrenome completos.');
+        setCarregandoLogin(false);
+        return; // Para a execução aqui
+      }
+    }
+
     try {
-      const resposta = await fetch(`${API_URL}/auth/login`, {
+      const endpoint = isRegistro ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
+      const body = isRegistro 
+        ? JSON.stringify({ nome: nomeRegistro, email: emailLogin, senha: senhaLogin })
+        : JSON.stringify({ email: emailLogin, senha: senhaLogin });
+
+      const resposta = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: emailLogin, senha: senhaLogin })
+        body
       });
-      if (!resposta.ok) throw new Error("Credenciais inválidas");
+      
       const dados = await resposta.json();
-      setUsuarioLogado(dados.usuario || { email: emailLogin });
+
+      if (!resposta.ok) {
+        throw new Error(dados.message || (isRegistro ? "Erro ao criar conta. Tente outro e-mail." : "Credenciais inválidas."));
+      }
+      
+      // Salva no LocalStorage (igual ao Login.jsx)
+      if (dados.token) {
+        localStorage.setItem('token', dados.token);
+        localStorage.setItem('usuario', JSON.stringify(dados.usuario));
+      }
+
+      setUsuarioLogado(dados.usuario || { email: emailLogin, nome: nomeRegistro });
       setIsLoginAberto(false);
       setEmailLogin("");
       setSenhaLogin("");
+      setNomeRegistro("");
     } catch (erro) {
-      setErroLogin("E-mail ou senha inválidos.");
+      setErroLogin(erro.message);
     } finally {
       setCarregandoLogin(false);
     }
   };
 
-  const handleLogout = () => setUsuarioLogado(null);
+  const imagensModal = produtoSelecionado?.imagens?.length > 0 
+    ? produtoSelecionado.imagens 
+    : (produtoSelecionado ? [{ url: produtoSelecionado.imgUrl }] : []);
 
-  const inputClasses = "w-full border border-zinc-200 rounded px-3 py-2 text-xs focus:outline-none focus:border-black";
+  const inputClasses = "w-full border border-zinc-200 rounded px-3 py-2 text-xs focus:outline-none focus:border-black transition-colors";
   const labelClasses = "text-[10px] font-bold tracking-widest uppercase text-zinc-400 block mb-1.5";
 
-  // Imagens do produto aberto no modal, filtradas pela cor selecionada (fallback: todas)
-  const corAtivaModal = produtoSelecionado
-    ? (corSelecionadaPorProduto[produtoSelecionado.id] || produtoSelecionado.cores?.[0])
-    : null;
-  const imagensModal = produtoSelecionado
-    ? (() => {
-        const porCor = produtoSelecionado.imagens?.filter(img => img.cor === corAtivaModal) || [];
-        if (porCor.length > 0) return porCor;
-        if (produtoSelecionado.imagens?.length > 0) return produtoSelecionado.imagens;
-        return [{ url: produtoSelecionado.imgUrl }];
-      })()
-    : [];
-
   return (
-    <div className="min-h-screen bg-white text-zinc-900 font-sans antialiased">
-      {/* Tarja do Topo — controlada pelo /admin */}
-      <div className={`text-white text-[10px] tracking-[0.2em] py-2.5 px-4 text-center font-medium uppercase ${configLoja.lojaAberta ? "bg-black" : "bg-zinc-700"}`}>
-        {configLoja.lojaAberta ? configLoja.fraseTopo : "LOJA TEMPORARIAMENTE FECHADA PARA NOVOS PEDIDOS"}
-      </div>
+    <div className="min-h-screen bg-white text-zinc-900 font-sans antialiased flex flex-col justify-between">
+      
+      <style>{`
+        @keyframes slideUpFade {
+          from { opacity: 0; transform: translateY(20px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .animate-slideUpFade { animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-fadeIn { animation: fadeIn 0.2s ease-out forwards; }
+      `}</style>
 
-      {/* Header */}
-      <header className="bg-white border-b border-zinc-100 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => setIsMenuAberto(v => !v)}
-              className="md:hidden cursor-pointer hover:opacity-75 transition-opacity"
-              aria-label="Abrir menu"
-            >
-              {isMenuAberto ? <FiX className="text-lg" /> : <FiMenu className="text-lg" />}
-            </button>
-            <h1 className="text-2xl font-black tracking-[0.3em] uppercase">BOO</h1>
-          </div>
+      <div>
+        <div className={`text-white text-[10px] tracking-[0.2em] py-2.5 px-4 text-center font-medium uppercase transition-colors ${configLoja.lojaAberta ? "bg-black" : "bg-zinc-700"}`}>
+          {configLoja.lojaAberta ? configLoja.fraseTopo : "LOJA TEMPORARIAMENTE FECHADA PARA NOVOS PEDIDOS"}
+        </div>
 
-          {/* Navegação central — desktop */}
-          <nav className="hidden md:flex items-center gap-8">
-            <button
-              onClick={() => selecionarCategoria("Todos")}
-              className={`text-[11px] font-bold uppercase tracking-widest transition-colors cursor-pointer ${categoriaAtiva === "Todos" ? "text-black" : "text-zinc-400 hover:text-black"}`}
-            >
-              Novidades
-            </button>
-            {categorias.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => selecionarCategoria(cat)}
-                className={`text-[11px] font-bold uppercase tracking-widest transition-colors cursor-pointer ${categoriaAtiva === cat ? "text-black" : "text-zinc-400 hover:text-black"}`}
-              >
-                {cat}
+        {/* Header */}
+        <header className="bg-white border-b border-zinc-100 sticky top-0 z-30">
+          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <button onClick={() => setIsMenuAberto(v => !v)} className="md:hidden cursor-pointer hover:opacity-75 transition-opacity">
+                {isMenuAberto ? <FiX className="text-lg" /> : <FiMenu className="text-lg" />}
               </button>
-            ))}
-          </nav>
-
-          {/* Ações à direita */}
-          <div className="flex items-center gap-5">
-            <div className="hidden sm:flex items-center">
-              {isBuscaAberta ? (
-                <input
-                  autoFocus
-                  type="text"
-                  value={termoBusca}
-                  onChange={(e) => setTermoBusca(e.target.value)}
-                  onBlur={() => { if (!termoBusca) setIsBuscaAberta(false); }}
-                  placeholder="Buscar produto..."
-                  className="border-b border-zinc-300 focus:border-black text-xs py-1 w-40 focus:outline-none"
-                />
-              ) : (
-                <button
-                  onClick={() => setIsBuscaAberta(true)}
-                  className="cursor-pointer hover:opacity-75 transition-opacity"
-                  aria-label="Buscar"
-                >
-                  <FiSearch className="text-base" />
-                </button>
-              )}
+              <h1 onClick={() => setVisaoAtual('home')} className="text-2xl font-black tracking-[0.3em] uppercase cursor-pointer">
+                BOO
+              </h1>
             </div>
 
-            <button
-              onClick={() => usuarioLogado ? handleLogout() : setIsLoginAberto(true)}
-              className="cursor-pointer hover:opacity-75 transition-opacity"
-              aria-label={usuarioLogado ? "Sair da conta" : "Entrar"}
-              title={usuarioLogado ? `${usuarioLogado.nome || usuarioLogado.email} — clique para sair` : "Entrar"}
-            >
-              {usuarioLogado ? (
-                <span className="w-6 h-6 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center">
-                  {(usuarioLogado.nome || usuarioLogado.email || "?").charAt(0).toUpperCase()}
-                </span>
-              ) : (
-                <FiUser className="text-base" />
-              )}
-            </button>
+            <div className="flex items-center gap-5">
+              <div className="hidden sm:flex items-center">
+                {isBuscaAberta ? (
+                  <input
+                    autoFocus
+                    type="text"
+                    value={termoBusca}
+                    onChange={(e) => {
+                      setTermoBusca(e.target.value);
+                      if (visaoAtual !== 'home') setVisaoAtual('home');
+                      if (e.target.value.length > 0) document.getElementById("catalogo")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    onBlur={() => { if (!termoBusca) setIsBuscaAberta(false); }}
+                    placeholder="Buscar..."
+                    className="border-b border-zinc-300 focus:border-black text-xs py-1 w-40 focus:outline-none transition-colors"
+                  />
+                ) : (
+                  <button onClick={() => setIsBuscaAberta(true)} className="cursor-pointer hover:opacity-75 transition-opacity">
+                    <FiSearch className="text-base" />
+                  </button>
+                )}
+              </div>
 
-            <button
-              onClick={() => setIsSacolaAberta(true)}
-              className="relative cursor-pointer hover:opacity-75 transition-opacity"
-              aria-label="Sacola"
-            >
-              <FiShoppingBag className="text-base" />
-              {carrinho.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-black text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
-                  {carrinho.reduce((a, b) => a + b.quantidade, 0)}
-                </span>
-              )}
-            </button>
-          </div>
-        </div>
+              {/* Menu do Usuário Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => usuarioLogado ? setIsUserMenuAberto(!isUserMenuAberto) : setIsLoginAberto(true)}
+                  className="cursor-pointer hover:opacity-75 transition-opacity flex items-center"
+                >
+                  {usuarioLogado ? (
+                    <span className="w-6 h-6 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center">
+                      {(usuarioLogado.nome || usuarioLogado.email || "?").charAt(0).toUpperCase()}
+                    </span>
+                  ) : (
+                    <FiUser className="text-base" />
+                  )}
+                </button>
 
-        {/* Navegação — mobile */}
-        {isMenuAberto && (
-          <div className="md:hidden border-t border-zinc-100 px-6 py-5 space-y-4">
-            <button
-              onClick={() => selecionarCategoria("Todos")}
-              className={`block text-xs font-bold uppercase tracking-widest ${categoriaAtiva === "Todos" ? "text-black" : "text-zinc-400"}`}
-            >
-              Novidades
-            </button>
-            {categorias.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => selecionarCategoria(cat)}
-                className={`block text-xs font-bold uppercase tracking-widest ${categoriaAtiva === cat ? "text-black" : "text-zinc-400"}`}
-              >
-                {cat}
-              </button>
-            ))}
-            <input
-              type="text"
-              value={termoBusca}
-              onChange={(e) => setTermoBusca(e.target.value)}
-              placeholder="Buscar produto..."
-              className="w-full border border-zinc-200 rounded px-3 py-2 text-xs focus:outline-none focus:border-black mt-2"
-            />
-          </div>
-        )}
-      </header>
-
-      {/* Hero Section */}
-      <section className="relative h-[70vh] bg-zinc-900 flex items-center justify-center text-center text-white px-6">
-        <div className="max-w-2xl space-y-4">
-          <h2 className="text-4xl md:text-6xl font-black tracking-tight uppercase">Performance & Estilo</h2>
-        </div>
-      </section>
-
-      {/* Catálogo de Produtos */}
-      <main id="catalogo" className="max-w-7xl mx-auto px-6 py-20">
-        <div className="flex flex-col gap-6 mb-12 border-b border-zinc-100 pb-6">
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-bold tracking-[0.2em] uppercase">Catálogo</h3>
-            <span className="text-xs text-zinc-400">{produtosFiltrados.length} produtos disponíveis</span>
-          </div>
-
-          {/* Filtro de categorias */}
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setCategoriaAtiva("Todos")}
-              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-colors cursor-pointer ${categoriaAtiva === "Todos" ? "bg-black text-white border-black" : "border-zinc-200 text-zinc-600 hover:border-zinc-400"}`}
-            >
-              Todos
-            </button>
-            {categorias.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setCategoriaAtiva(cat)}
-                className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-colors cursor-pointer ${categoriaAtiva === cat ? "bg-black text-white border-black" : "border-zinc-200 text-zinc-600 hover:border-zinc-400"}`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {produtosFiltrados.length === 0 ? (
-          <div className="text-center py-20 text-zinc-400 text-xs tracking-widest uppercase">
-            Nenhum produto encontrado{termoBusca ? ` para "${termoBusca}"` : ""}.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
-            {produtosFiltrados.map((produto) => {
-              const corAtiva = corSelecionadaPorProduto[produto.id] || produto.cores?.[0];
-              const imagemAtual = produto.imagens?.find(img => img.cor === corAtiva)?.url || produto.imagens?.[0]?.url || produto.imgUrl;
-
-              return (
-                <div key={produto.id} className="group cursor-pointer">
-                  <div
-                    onClick={() => abrirModalProduto(produto)}
-                    className="aspect-3/4 bg-zinc-100 rounded overflow-hidden mb-4 relative"
-                  >
-                    <img
-                      src={imagemAtual}
-                      alt={produto.nome}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    {produto.categoria && (
-                      <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">{produto.categoria}</p>
-                    )}
-                    <h4 onClick={() => abrirModalProduto(produto)} className="text-xs font-semibold uppercase tracking-wider text-zinc-800 hover:text-black">
-                      {produto.nome}
-                    </h4>
-                    <p className="text-xs font-bold text-zinc-900">
-                      R$ {Number(produto.preco).toFixed(2).replace('.', ',')}
-                    </p>
-
-                    {/* Seleção de Cores na Vitrine */}
-                    {produto.cores && produto.cores.length > 0 && (
-                      <div className="flex gap-1.5 pt-1">
-                        {produto.cores.map((cor, i) => (
-                          <button
-                            key={i}
-                            onClick={() => selecionarCor(produto.id, cor)}
-                            style={{ backgroundColor: cor }}
-                            className={`w-3.5 h-3.5 rounded-full border ${corAtiva === cor ? 'border-black scale-110' : 'border-zinc-300'} transition-all cursor-pointer`}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </main>
-
-      {/* Modal de Detalhes do Produto */}
-      {produtoSelecionado && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white w-full max-w-3xl rounded-lg overflow-hidden shadow-2xl flex flex-col md:flex-row relative max-h-[90vh]">
-            <button
-              onClick={() => setProdutoSelecionado(null)}
-              className="absolute top-4 right-4 z-10 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center text-zinc-600 hover:bg-zinc-100 cursor-pointer"
-            >
-              <FiX />
-            </button>
-
-            {/* Galeria — thumbnails + imagem principal com navegação, estilo Mercado Livre */}
-            <div className="md:w-1/2 flex overflow-hidden">
-              {imagensModal.length > 1 && (
-                <div className="hidden md:flex flex-col gap-2 p-4 overflow-y-auto">
-                  {imagensModal.map((img, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setIndiceImagemModal(i)}
-                      className={`w-14 h-14 rounded overflow-hidden border-2 flex-shrink-0 cursor-pointer transition-colors ${indiceImagemModal === i ? "border-black" : "border-transparent opacity-60 hover:opacity-100"}`}
-                    >
-                      <img src={img.url} alt="" className="w-full h-full object-cover" />
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="relative flex-1 aspect-3/4 bg-zinc-100">
-                <img
-                  src={imagensModal[indiceImagemModal]?.url}
-                  alt={produtoSelecionado.nome}
-                  className="w-full h-full object-cover"
-                />
-                {imagensModal.length > 1 && (
+                {isUserMenuAberto && usuarioLogado && (
                   <>
-                    <button
-                      onClick={() => setIndiceImagemModal(prev => (prev - 1 + imagensModal.length) % imagensModal.length)}
-                      className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center hover:bg-white cursor-pointer"
-                      aria-label="Imagem anterior"
-                    >
-                      <FiChevronLeft />
-                    </button>
-                    <button
-                      onClick={() => setIndiceImagemModal(prev => (prev + 1) % imagensModal.length)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 bg-white/90 rounded-full flex items-center justify-center hover:bg-white cursor-pointer"
-                      aria-label="Próxima imagem"
-                    >
-                      <FiChevronRight />
-                    </button>
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5">
-                      {imagensModal.map((_, i) => (
-                        <span
-                          key={i}
-                          className={`w-1.5 h-1.5 rounded-full ${indiceImagemModal === i ? "bg-black" : "bg-white border border-zinc-300"}`}
-                        />
-                      ))}
+                    <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuAberto(false)}></div>
+                    <div className="absolute right-0 mt-4 w-56 bg-white border border-zinc-100 rounded-lg shadow-xl py-2 z-50 animate-fadeIn">
+                      <div className="px-4 py-3 border-b border-zinc-50 mb-2">
+                        <p className="text-xs font-bold text-zinc-900 truncate">{usuarioLogado.nome || 'Cliente'}</p>
+                        <p className="text-[10px] text-zinc-500 truncate mt-0.5">{usuarioLogado.email}</p>
+                      </div>
+                      <button onClick={() => setIsUserMenuAberto(false)} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors">Minha Conta</button>
+                      <button onClick={() => setIsUserMenuAberto(false)} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors">Meus Pedidos</button>
+                      <button 
+                        onClick={logout} 
+                        className="w-full text-left px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 uppercase tracking-wider mt-1 border-t border-zinc-50 transition-colors"
+                      >
+                        Sair da Conta
+                      </button>
                     </div>
                   </>
                 )}
               </div>
-            </div>
 
-            <div className="md:w-1/2 p-8 flex flex-col justify-between overflow-y-auto">
-              <div className="space-y-6">
-                <div>
-                  {produtoSelecionado.categoria && (
-                    <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mb-1">{produtoSelecionado.categoria}</p>
-                  )}
-                  <h3 className="text-lg font-bold uppercase tracking-wider">{produtoSelecionado.nome}</h3>
-                  <p className="text-base font-black text-zinc-900 mt-1">
-                    R$ {Number(produtoSelecionado.preco).toFixed(2).replace('.', ',')}
-                  </p>
-                </div>
-
-                {produtoSelecionado.cores && produtoSelecionado.cores.length > 0 && (
-                  <div>
-                    <label className={labelClasses}>Cor</label>
-                    <div className="flex gap-2">
-                      {produtoSelecionado.cores.map((cor, i) => (
-                        <button
-                          key={i}
-                          onClick={() => selecionarCor(produtoSelecionado.id, cor)}
-                          style={{ backgroundColor: cor }}
-                          className={`w-6 h-6 rounded-full border-2 cursor-pointer transition-all ${corAtivaModal === cor ? "border-black scale-110" : "border-zinc-200"}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
+              <button
+                onClick={() => { setVisaoAtual('carrinho'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="relative cursor-pointer hover:opacity-75 transition-opacity"
+              >
+                <FiShoppingBag className="text-base" />
+                {carrinho.length > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-black text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold animate-fadeIn">
+                    {carrinho.reduce((a, b) => a + b.quantidade, 0)}
+                  </span>
                 )}
+              </button>
+            </div>
+          </div>
+        </header>
 
-                <div>
-                  <label className={labelClasses}>Tamanho</label>
-                  <div className="flex gap-2">
-                    {["PP", "P", "M", "G", "GG"].map(tam => (
-                      <button
-                        key={tam}
-                        onClick={() => setTamanhoEscolhido(tam)}
-                        className={`w-10 h-10 border rounded text-xs font-bold cursor-pointer transition-colors ${
-                          tamanhoEscolhido === tam ? "border-black bg-black text-white" : "border-zinc-200 text-zinc-700 hover:border-zinc-400"
-                        }`}
-                      >
-                        {tam}
-                      </button>
+        {/* CONTEÚDO PRINCIPAL */}
+        <div className="transition-opacity duration-300 ease-in-out">
+          {visaoAtual === 'home' && (
+            <>
+              <section className="relative h-[70vh] bg-zinc-900 flex items-center justify-center text-center text-white px-6">
+                <div className="max-w-2xl space-y-4 animate-slideUpFade">
+                  <h2 className="text-4xl md:text-6xl font-black tracking-tight uppercase">Performance & Estilo</h2>
+                </div>
+              </section>
+
+              <main id="catalogo" className="max-w-7xl mx-auto px-6 py-20">
+                <div className="flex flex-col gap-6 mb-12 border-b border-zinc-100 pb-6">
+                  <h3 className="text-sm font-bold tracking-[0.2em] uppercase">Catálogo</h3>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => setCategoriaAtiva("Todos")} className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-colors cursor-pointer ${categoriaAtiva === "Todos" ? "bg-black text-white border-black" : "border-zinc-200 text-zinc-600 hover:border-zinc-400"}`}>Todos</button>
+                    {categorias.map((cat) => (
+                      <button key={cat} onClick={() => setCategoriaAtiva(cat)} className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest border transition-colors cursor-pointer ${categoriaAtiva === cat ? "bg-black text-white border-black" : "border-zinc-200 text-zinc-600 hover:border-zinc-400"}`}>{cat}</button>
                     ))}
                   </div>
                 </div>
 
-                <div>
-                  <label className={labelClasses}>Calcular Frete</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="00000-000"
-                      value={cep}
-                      onChange={(e) => setCep(e.target.value)}
-                      className={inputClasses}
-                    />
-                    <button
-                      type="button"
-                      onClick={calcularFrete}
-                      className="flex items-center gap-1.5 bg-zinc-100 hover:bg-zinc-200 px-4 py-2 rounded text-xs font-bold uppercase cursor-pointer whitespace-nowrap"
-                    >
-                      <FiTruck /> OK
-                    </button>
+                {produtosFiltrados.length === 0 ? (
+                  <div className="text-center py-20 text-zinc-400 text-xs tracking-widest uppercase animate-fadeIn">Nenhum produto encontrado.</div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
+                    {produtosFiltrados.map((produto) => (
+                      <CardProduto key={produto.id} produto={produto} onAbrir={abrirProduto} />
+                    ))}
                   </div>
-                  {freteResultado && (
-                    <p className="text-[10px] text-green-600 font-bold uppercase mt-2">
-                      Frete: R$ {freteResultado.valor.toFixed(2)} ({freteResultado.prazo})
-                    </p>
-                  )}
-                </div>
-              </div>
+                )}
+              </main>
+            </>
+          )}
 
-              <button
-                onClick={() => adicionarAoCarrinho(produtoSelecionado, tamanhoEscolhido, corSelecionadaPorProduto[produtoSelecionado.id])}
-                disabled={!configLoja.lojaAberta}
-                className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors mt-8 cursor-pointer disabled:bg-zinc-300 disabled:cursor-not-allowed"
-              >
-                {configLoja.lojaAberta ? "Adicionar à Sacola" : "Loja Fechada no Momento"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          {visaoAtual === 'produto' && produtoSelecionado && (
+            <div className="max-w-7xl mx-auto px-6 py-12 animate-slideUpFade">
+              <button onClick={() => setVisaoAtual('home')} className="mb-8 text-xs font-bold uppercase tracking-wider text-zinc-500 hover:text-black flex items-center gap-2 transition-colors">← Voltar</button>
 
-      {/* Modal de Login */}
-      {isLoginAberto && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="bg-white w-full max-w-sm rounded-lg shadow-2xl p-8 relative">
-            <button
-              onClick={() => setIsLoginAberto(false)}
-              className="absolute top-4 right-4 w-8 h-8 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-600 hover:bg-zinc-200 cursor-pointer"
-            >
-              <FiX className="text-xs" />
-            </button>
-
-            <h3 className="text-sm font-bold tracking-widest uppercase mb-6">Entrar na sua conta</h3>
-
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className={labelClasses}>E-mail</label>
-                <input
-                  type="email"
-                  required
-                  value={emailLogin}
-                  onChange={(e) => setEmailLogin(e.target.value)}
-                  className={inputClasses}
-                />
-              </div>
-              <div>
-                <label className={labelClasses}>Senha</label>
-                <input
-                  type="password"
-                  required
-                  value={senhaLogin}
-                  onChange={(e) => setSenhaLogin(e.target.value)}
-                  className={inputClasses}
-                />
-              </div>
-
-              {erroLogin && (
-                <p className="text-[10px] text-red-500 font-bold uppercase tracking-wide">{erroLogin}</p>
-              )}
-
-              <button
-                type="submit"
-                disabled={carregandoLogin}
-                className="w-full bg-black text-white py-3 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {carregandoLogin ? "Entrando..." : "Entrar"}
-              </button>
-            </form>
-
-            <p className="text-[10px] text-zinc-400 text-center mt-5 uppercase tracking-wide">
-              Ainda não tem conta?{" "}
-              <button className="underline font-bold text-zinc-700 cursor-pointer">Cadastre-se</button>
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Drawer do Carrinho / Sacola / Checkout */}
-      {isSacolaAberta && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs">
-          <div className="bg-white w-full max-w-md h-full flex flex-col shadow-2xl">
-            <div className="p-6 flex flex-col h-full overflow-y-auto">
-              <div className="flex justify-between items-center pb-6 border-b border-zinc-100">
-                <h3 className="text-sm font-bold tracking-widest uppercase">
-                  {etapaSacola === "carrinho" && "Sua Sacola"}
-                  {etapaSacola === "checkout" && "Dados de Entrega"}
-                  {etapaSacola === "confirmado" && "Pedido Confirmado"}
-                </h3>
-                <button onClick={fecharSacola} className="text-zinc-400 hover:text-black cursor-pointer">
-                  <FiX />
-                </button>
-              </div>
-
-              {/* Etapa 1 — Carrinho */}
-              {etapaSacola === "carrinho" && (
-                <>
-                  <div className="py-6 space-y-4">
-                    {carrinho.length === 0 ? (
-                      <p className="text-center text-xs text-zinc-400 uppercase py-10">Sua sacola está vazia.</p>
-                    ) : (
-                      carrinho.map(item => (
-                        <div key={item.cartId} className="flex justify-between items-center border-b border-zinc-50 pb-4">
-                          <div>
-                            <h4 className="text-xs font-bold uppercase">{item.nome}</h4>
-                            <p className="text-[10px] text-zinc-400 uppercase">Tamanho: {item.tamanhoEscolhido} | Qtd: {item.quantidade}</p>
-                            <p className="text-xs font-semibold mt-1">R$ {(item.preco * item.quantidade).toFixed(2)}</p>
-                          </div>
-                          <button onClick={() => removerDoCarrinho(item.cartId)} className="text-[10px] text-red-500 font-bold uppercase hover:underline cursor-pointer">
-                            Remover
-                          </button>
-                        </div>
-                      ))
-                    )}
+              <div className="flex flex-col md:flex-row gap-12">
+                <div className="md:w-1/2 flex flex-col gap-4">
+                  <div className="aspect-[3/4] bg-zinc-100 rounded-lg overflow-hidden border">
+                    <img src={imagensModal[indiceImagemModal]?.url} alt={produtoSelecionado.nome} className="w-full h-full object-cover animate-fadeIn" />
                   </div>
-
-                  {carrinho.length > 0 && (
-                    <div className="mt-auto pt-6 border-t border-zinc-100 space-y-3 bg-zinc-50 p-4 rounded">
-                      <div className="flex justify-between text-xs text-zinc-500 uppercase tracking-wide">
-                        <span>Subtotal</span>
-                        <span>R$ {totalCarrinho.toFixed(2).replace('.', ',')}</span>
-                      </div>
-                      {freteResultado ? (
-                        <div className="flex justify-between text-xs text-zinc-500 uppercase tracking-wide">
-                          <span>Frete</span>
-                          <span>R$ {freteResultado.valor.toFixed(2).replace('.', ',')}</span>
-                        </div>
-                      ) : (
-                        <p className="text-[10px] text-zinc-400 uppercase tracking-wide">Frete calculado na página do produto</p>
-                      )}
-                      <div className="flex justify-between text-sm font-bold pt-2 border-t border-zinc-200">
-                        <span>Total</span>
-                        <span>R$ {totalComFrete.toFixed(2).replace('.', ',')}</span>
-                      </div>
-                      <button
-                        onClick={irParaEntrega}
-                        className="w-full bg-black text-white py-3.5 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors cursor-pointer mt-2"
-                      >
-                        Continuar para Entrega
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Etapa 2 — Checkout */}
-              {etapaSacola === "checkout" && (
-                <form onSubmit={finalizarPedido} className="flex flex-col flex-1 py-6 space-y-4">
-                  <div>
-                    <label className={labelClasses}>Nome Completo</label>
-                    <input required value={dadosEntrega.nome} onChange={handleChangeEntrega("nome")} className={inputClasses} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelClasses}>E-mail</label>
-                      <input type="email" required value={dadosEntrega.email} onChange={handleChangeEntrega("email")} className={inputClasses} />
-                    </div>
-                    <div>
-                      <label className={labelClasses}>Telefone</label>
-                      <input required value={dadosEntrega.telefone} onChange={handleChangeEntrega("telefone")} className={inputClasses} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className={labelClasses}>CEP</label>
-                      <input required value={dadosEntrega.cep} onChange={handleChangeEntrega("cep")} className={inputClasses} />
-                    </div>
-                    <div className="col-span-2">
-                      <label className={labelClasses}>Rua</label>
-                      <input required value={dadosEntrega.rua} onChange={handleChangeEntrega("rua")} className={inputClasses} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <label className={labelClasses}>Número</label>
-                      <input required value={dadosEntrega.numero} onChange={handleChangeEntrega("numero")} className={inputClasses} />
-                    </div>
-                    <div className="col-span-2">
-                      <label className={labelClasses}>Complemento</label>
-                      <input value={dadosEntrega.complemento} onChange={handleChangeEntrega("complemento")} className={inputClasses} />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="col-span-2">
-                      <label className={labelClasses}>Bairro</label>
-                      <input required value={dadosEntrega.bairro} onChange={handleChangeEntrega("bairro")} className={inputClasses} />
-                    </div>
-                    <div>
-                      <label className={labelClasses}>Estado</label>
-                      <input required value={dadosEntrega.estado} onChange={handleChangeEntrega("estado")} className={inputClasses} />
-                    </div>
-                  </div>
-                  <div>
-                    <label className={labelClasses}>Cidade</label>
-                    <input required value={dadosEntrega.cidade} onChange={handleChangeEntrega("cidade")} className={inputClasses} />
-                  </div>
-
-                  <div>
-                    <label className={labelClasses}>Forma de Pagamento</label>
-                    <div className="flex gap-2">
-                      {[{ id: "cartao", label: "Cartão" }, { id: "pix", label: "Pix" }].map(op => (
-                        <button
-                          type="button"
-                          key={op.id}
-                          onClick={() => setFormaPagamento(op.id)}
-                          className={`flex-1 border rounded px-3 py-2.5 text-xs font-bold uppercase tracking-widest cursor-pointer transition-colors ${
-                            formaPagamento === op.id ? "border-black bg-black text-white" : "border-zinc-200 text-zinc-700 hover:border-zinc-400"
-                          }`}
-                        >
-                          {op.label}
+                  {imagensModal.length > 1 && (
+                    <div className="flex gap-3 overflow-x-auto pb-2">
+                      {imagensModal.map((img, idx) => (
+                        <button key={idx} onClick={() => setIndiceImagemModal(idx)} className={`w-20 aspect-[3/4] rounded border-2 overflow-hidden flex-shrink-0 transition-colors ${indiceImagemModal === idx ? "border-black" : "border-transparent opacity-60 hover:opacity-100"}`}>
+                          <img src={img.url} alt="" className="w-full h-full object-cover" />
                         </button>
                       ))}
                     </div>
-                  </div>
-
-                  {erroPedido && (
-                    <p className="text-[10px] text-red-500 font-bold uppercase tracking-wide">{erroPedido}</p>
                   )}
+                </div>
 
-                  <div className="mt-auto pt-6 border-t border-zinc-100 space-y-3">
-                    <div className="flex justify-between text-sm font-bold">
-                      <span>Total:</span>
-                      <span>R$ {totalComFrete.toFixed(2).replace('.', ',')}</span>
+                <div className="md:w-1/2 flex flex-col justify-center">
+                  <div className="space-y-6">
+                    <div>
+                      <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mb-1">{produtoSelecionado.categoria}</p>
+                      <h3 className="text-3xl font-black uppercase tracking-wider">{produtoSelecionado.nome}</h3>
+                      <p className="text-2xl font-bold text-zinc-900 mt-2">R$ {Number(produtoSelecionado.preco).toFixed(2).replace('.', ',')}</p>
                     </div>
-                    <button
-                      type="submit"
-                      disabled={enviandoPedido}
-                      className="w-full bg-black text-white py-3.5 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      {enviandoPedido ? "Processando..." : "Confirmar Pedido"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setEtapaSacola("carrinho")}
-                      className="w-full text-[10px] text-zinc-400 uppercase tracking-widest hover:text-black cursor-pointer"
-                    >
-                      Voltar à Sacola
-                    </button>
-                  </div>
-                </form>
-              )}
 
-              {/* Etapa 3 — Confirmação */}
-              {etapaSacola === "confirmado" && (
-                <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 py-10">
-                  <p className="text-xs uppercase tracking-widest text-zinc-400">Pedido nº {numeroPedido}</p>
-                  <h4 className="text-lg font-black uppercase">Obrigado pela compra!</h4>
-                  <p className="text-xs text-zinc-500 max-w-xs">Você receberá a confirmação e os detalhes de rastreio por e-mail em instantes.</p>
-                  <button
-                    onClick={reiniciarSacola}
-                    className="text-xs font-bold uppercase tracking-widest underline cursor-pointer mt-4"
-                  >
-                    Continuar Comprando
+                    <div>
+                      <label className={labelClasses}>Tamanho</label>
+                      <div className="flex gap-2">
+                        {["PP", "P", "M", "G", "GG"].map(tam => (
+                          <button key={tam} onClick={() => setTamanhoEscolhido(tam)} className={`w-12 h-12 border rounded text-sm font-bold cursor-pointer transition-colors ${tamanhoEscolhido === tam ? "border-black bg-black text-white" : "border-zinc-200 text-zinc-700 hover:border-zinc-400"}`}>{tam}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="border-t border-b border-zinc-100 py-6 my-6">
+                      <label className={labelClasses}>Calcular Frete</label>
+                      <div className="flex gap-2 max-w-sm">
+                        <input type="text" placeholder="00000-000" value={cep} onChange={(e) => setCep(e.target.value)} className={inputClasses} />
+                        <button type="button" onClick={calcularFrete} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
+                      </div>
+                      {freteResultado && (
+                        <p className="text-xs text-green-700 font-bold uppercase mt-3 bg-green-50 p-3 rounded animate-fadeIn">Frete: R$ {freteResultado.valor.toFixed(2).replace('.', ',')} ({freteResultado.prazo})</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <button onClick={() => adicionarAoCarrinho(produtoSelecionado, tamanhoEscolhido)} disabled={!configLoja.lojaAberta} className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors mt-8 cursor-pointer disabled:bg-zinc-300 disabled:cursor-not-allowed">
+                    {configLoja.lojaAberta ? "Adicionar à Sacola" : "Loja Fechada no Momento"}
                   </button>
                 </div>
+              </div>
+
+              {produtosRelacionados.length > 0 && (
+                <div className="mt-24 border-t border-zinc-100 pt-16">
+                  <h3 className="text-xl font-black tracking-[0.2em] uppercase text-center mb-10">Você também pode gostar</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+                    {produtosRelacionados.map((item) => (
+                      <CardProduto key={item.id} produto={item} onAbrir={abrirProduto} />
+                    ))}
+                  </div>
+                </div>
               )}
+            </div>
+          )}
+
+          {visaoAtual === 'carrinho' && (
+            <div className="max-w-5xl mx-auto px-6 py-12 animate-slideUpFade">
+              <div className="flex justify-between items-center mb-8 border-b border-zinc-100 pb-4">
+                <h2 className="text-2xl font-black uppercase tracking-wider">{etapaSacola === "carrinho" ? "Sua Sacola" : etapaSacola === "checkout" ? "Finalizar Pedido" : "Sucesso!"}</h2>
+                <button onClick={() => setVisaoAtual('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors">Continuar Comprando</button>
+              </div>
+
+              {numeroPedido ? (
+                <div className="text-center py-20 bg-zinc-50 rounded-lg animate-fadeIn">
+                  <h4 className="text-2xl font-black uppercase mb-4 text-green-700">Pedido nº {numeroPedido} Realizado!</h4>
+                  <p className="text-sm text-zinc-500 mb-8">Acompanhe os detalhes pelo seu e-mail.</p>
+                  <button onClick={reiniciarSacola} className="bg-black text-white px-8 py-3 rounded text-xs font-bold uppercase tracking-widest hover:bg-zinc-800 transition-colors">Voltar para a Loja</button>
+                </div>
+              ) : carrinho.length === 0 ? (
+                <div className="text-center py-32 text-zinc-400 animate-fadeIn">
+                  <p className="text-sm uppercase tracking-widest mb-6">Sua sacola está vazia.</p>
+                  <button onClick={() => setVisaoAtual('home')} className="border border-black text-black px-6 py-3 text-xs font-bold uppercase tracking-widest hover:bg-zinc-50 transition-colors">Ver Produtos</button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                  <div className="lg:col-span-2 space-y-6">
+                    {etapaSacola === "carrinho" ? (
+                      carrinho.map(item => (
+                        <div key={item.cartId} className="flex gap-4 border border-zinc-100 p-4 rounded-lg items-center shadow-sm animate-fadeIn">
+                          <img src={item.imgUrl} alt={item.nome} className="w-20 h-24 object-cover rounded bg-zinc-100" />
+                          <div className="flex-1">
+                            <h4 className="text-sm font-bold uppercase">{item.nome}</h4>
+                            <p className="text-xs text-zinc-500 uppercase mt-1">Tamanho: {item.tamanhoEscolhido}</p>
+                            <p className="text-sm font-black mt-2">R$ {(item.preco * item.quantidade).toFixed(2).replace('.', ',')}</p>
+                          </div>
+                          <button onClick={() => removerDoCarrinho(item.cartId)} className="text-xs text-red-500 font-bold uppercase hover:underline transition-all">Remover</button>
+                        </div>
+                      ))
+                    ) : (
+                      <form id="form-checkout" onSubmit={finalizarPedido} className="border border-zinc-100 p-6 rounded-lg shadow-sm space-y-4 animate-slideUpFade">
+                        <h3 className="font-bold uppercase border-b pb-2 mb-4">Dados de Entrega</h3>
+                        <div><label className={labelClasses}>Nome Completo</label><input required value={dadosEntrega.nome} onChange={handleChangeEntrega("nome")} className={inputClasses} /></div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div><label className={labelClasses}>E-mail</label><input type="email" required value={dadosEntrega.email} onChange={handleChangeEntrega("email")} className={inputClasses} /></div>
+                          <div><label className={labelClasses}>Telefone</label><input required value={dadosEntrega.telefone} onChange={handleChangeEntrega("telefone")} className={inputClasses} /></div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="col-span-2"><label className={labelClasses}>Rua / Endereço</label><input required value={dadosEntrega.rua} onChange={handleChangeEntrega("rua")} className={inputClasses} /></div>
+                          <div><label className={labelClasses}>Número</label><input required value={dadosEntrega.numero} onChange={handleChangeEntrega("numero")} className={inputClasses} /></div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div><label className={labelClasses}>Bairro</label><input required value={dadosEntrega.bairro} onChange={handleChangeEntrega("bairro")} className={inputClasses} /></div>
+                          <div><label className={labelClasses}>Cidade</label><input required value={dadosEntrega.cidade} onChange={handleChangeEntrega("cidade")} className={inputClasses} /></div>
+                          <div><label className={labelClasses}>Estado (UF)</label><input required value={dadosEntrega.estado} onChange={handleChangeEntrega("estado")} className={inputClasses} /></div>
+                        </div>
+                        <h3 className="font-bold uppercase border-b pb-2 mt-8 mb-4">Pagamento</h3>
+                        <div className="flex gap-2">
+                          {[{ id: "cartao", label: "Cartão de Crédito" }, { id: "pix", label: "Pix" }].map(op => (
+                            <button type="button" key={op.id} onClick={() => setFormaPagamento(op.id)} className={`flex-1 border rounded px-3 py-4 text-xs font-bold uppercase tracking-widest cursor-pointer transition-colors ${formaPagamento === op.id ? "border-black bg-black text-white" : "border-zinc-200 text-zinc-700 hover:border-black"}`}>{op.label}</button>
+                          ))}
+                        </div>
+                      </form>
+                    )}
+                  </div>
+
+                  <div className="border border-zinc-100 p-6 rounded-lg shadow-sm h-fit bg-zinc-50">
+                    <h3 className="font-bold uppercase border-b border-zinc-200 pb-3 mb-4">Resumo do Pedido</h3>
+                    <div className="space-y-3 mb-6">
+                      <div className="flex justify-between text-sm text-zinc-600"><span>Subtotal</span><span>R$ {totalCarrinho.toFixed(2).replace('.', ',')}</span></div>
+                      {freteResultado && <div className="flex justify-between text-sm text-zinc-600"><span>Frete</span><span>R$ {freteResultado.valor.toFixed(2).replace('.', ',')}</span></div>}
+                      <div className="flex justify-between text-lg font-black pt-3 border-t border-zinc-200"><span>Total</span><span>R$ {totalComFrete.toFixed(2).replace('.', ',')}</span></div>
+                    </div>
+                    {erroPedido && <p className="text-[10px] text-red-500 font-bold uppercase mb-4 text-center">{erroPedido}</p>}
+                    {etapaSacola === "carrinho" ? (
+                      <button onClick={irParaEntrega} className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors">Ir para a Entrega</button>
+                    ) : (
+                      <div className="space-y-3">
+                        <button type="submit" form="form-checkout" disabled={enviandoPedido} className="w-full bg-green-700 text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-green-800 transition-colors disabled:opacity-50">{enviandoPedido ? "Processando..." : "Confirmar Pedido"}</button>
+                        <button type="button" onClick={() => setEtapaSacola("carrinho")} className="w-full text-xs font-bold text-zinc-500 uppercase hover:text-black transition-colors">Voltar à Sacola</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal de Login e Cadastro (Agora blindado igual ao Login.jsx) */}
+      {isLoginAberto && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"
+          onClick={(e) => e.target === e.currentTarget && setIsLoginAberto(false)}
+        >
+          <div className="bg-white w-full max-w-sm rounded-lg shadow-2xl p-8 relative animate-slideUpFade">
+            <button onClick={() => setIsLoginAberto(false)} className="absolute top-4 right-4 w-8 h-8 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-600 hover:bg-zinc-200 transition-colors">
+              <FiX className="text-xs" />
+            </button>
+            
+            <h3 className="text-sm font-bold tracking-widest uppercase mb-1">
+              {isRegistro ? "Criar nova conta" : "Entrar na sua conta"}
+            </h3>
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-6">
+              {isRegistro ? "Preencha seus dados abaixo" : "Bem-vindo de volta"}
+            </p>
+
+            <form onSubmit={handleAuth} className="space-y-4">
+              {isRegistro && (
+                <div className="animate-fadeIn">
+                  <label className={labelClasses}>Nome Completo</label>
+                  <input type="text" required value={nomeRegistro} onChange={(e) => setNomeRegistro(e.target.value)} className={inputClasses} placeholder="Maria Silva" />
+                </div>
+              )}
+              <div>
+                <label className={labelClasses}>E-mail</label>
+                <input type="email" required value={emailLogin} onChange={(e) => setEmailLogin(e.target.value)} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>Senha</label>
+                <input type="password" required value={senhaLogin} onChange={(e) => setSenhaLogin(e.target.value)} className={inputClasses} />
+              </div>
+              
+              {erroLogin && <p className="text-[10px] text-red-500 font-bold uppercase bg-red-50 p-2 rounded">{erroLogin}</p>}
+              
+              <button type="submit" disabled={carregandoLogin} className="w-full bg-black text-white py-3.5 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 disabled:opacity-50 transition-colors mt-2">
+                {carregandoLogin ? "Aguarde..." : (isRegistro ? "Cadastrar" : "Entrar")}
+              </button>
+            </form>
+
+            <div className="mt-6 text-center border-t border-zinc-100 pt-6">
+              <p className="text-xs text-zinc-500">
+                {isRegistro ? "Já tem uma conta?" : "Ainda não tem conta?"}
+              </p>
+              <button
+                type="button"
+                onClick={() => { setIsRegistro(!isRegistro); setErroLogin(null); setNomeRegistro(''); }}
+                className="text-xs font-bold uppercase tracking-wider text-black mt-2 hover:underline transition-all"
+              >
+                {isRegistro ? "Fazer Login" : "Criar Conta"}
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Footer */}
       <footer className="bg-black text-white py-16 mt-20 border-t border-zinc-900">
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
           <div className="space-y-3 text-center md:text-left">
