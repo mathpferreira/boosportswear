@@ -8,7 +8,13 @@ import {
   FiSearch,
   FiAlertTriangle,
   FiLayers,
-  FiTag
+  FiTag,
+  FiHome,
+  FiShoppingBag,
+  FiDollarSign,
+  FiTruck,
+  FiClock,
+  FiChevronDown
 } from 'react-icons/fi';
 
 export default function Admin() {
@@ -26,8 +32,22 @@ export default function Admin() {
   const [paginaAtual, setPaginaAtual] = useState(1);
   const itensPorPagina = 8;
 
-  // Abas: 'produtos', 'categorias' ou 'configuracoes'
-  const [abaAtiva, setAbaAtiva] = useState('produtos');
+  // Abas: 'home', 'produtos', 'pedidos', 'categorias' ou 'configuracoes'
+  const [abaAtiva, setAbaAtiva] = useState('home');
+
+  // Pedidos
+  const [pedidos, setPedidos] = useState([]);
+  const [carregandoPedidos, setCarregandoPedidos] = useState(true);
+  const [pedidoSelecionado, setPedidoSelecionado] = useState(null);
+  const [filtroStatusPedido, setFiltroStatusPedido] = useState("Todos");
+
+  const STATUS_PEDIDO = [
+    { valor: "pendente", label: "Pendente", cor: "bg-amber-100 text-amber-700" },
+    { valor: "pago", label: "Pago", cor: "bg-blue-100 text-blue-700" },
+    { valor: "enviado", label: "Enviado", cor: "bg-indigo-100 text-indigo-700" },
+    { valor: "entregue", label: "Entregue", cor: "bg-emerald-100 text-emerald-700" },
+    { valor: "cancelado", label: "Cancelado", cor: "bg-red-100 text-red-700" },
+  ];
 
   // Categorias
   const [categorias, setCategorias] = useState([]);
@@ -83,6 +103,52 @@ const dispararToast = (msg, tipo = "sucesso") => {
     }
   };
 
+  // Busca os pedidos no backend.
+  // ATENÇÃO: este endpoint ainda precisa existir na API (GET /api/pedidos).
+  // Formato esperado por item: { id, numero, cliente: { nome, email, telefone },
+  // itens: [{ nome, tamanho, quantidade, preco }], total, frete, status,
+  // formaPagamento, endereco, criadoEm }
+  const carregarPedidos = async () => {
+    setCarregandoPedidos(true);
+    try {
+      const res = await fetch(`${API_URL}/pedidos`);
+      if (res.ok) {
+        const data = await res.json();
+        setPedidos(data);
+      } else {
+        dispararToast("Não foi possível carregar os pedidos.", "erro");
+      }
+    } catch (e) {
+      console.error("Erro ao carregar pedidos:", e);
+      dispararToast("Erro de conexão ao carregar pedidos.", "erro");
+    } finally {
+      setCarregandoPedidos(false);
+    }
+  };
+
+  // Atualiza o status de um pedido (ex: pendente -> pago -> enviado -> entregue)
+  const atualizarStatusPedido = async (pedidoId, novoStatus) => {
+    try {
+      const res = await fetch(`${API_URL}/pedidos/${pedidoId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: novoStatus })
+      });
+      if (res.ok) {
+        setPedidos(prev => prev.map(p => p.id === pedidoId ? { ...p, status: novoStatus } : p));
+        if (pedidoSelecionado?.id === pedidoId) {
+          setPedidoSelecionado(prev => ({ ...prev, status: novoStatus }));
+        }
+        dispararToast("Status do pedido atualizado!");
+      } else {
+        dispararToast("Erro ao atualizar status do pedido.", "erro");
+      }
+    } catch (e) {
+      console.error(e);
+      dispararToast("Erro de conexão ao atualizar pedido.", "erro");
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('@BOO:token');
     const usuarioSalvo = localStorage.getItem('@BOO:usuario');
@@ -101,6 +167,7 @@ const dispararToast = (msg, tipo = "sucesso") => {
     setIsVerificando(false); 
     carregarProdutos();
     carregarCategorias();
+    carregarPedidos();
 
     const configSalva = localStorage.getItem('@LojaDaBia:config');
     if (configSalva) {
@@ -355,6 +422,34 @@ const handleFileUpload = async (e) => {
   const totalProdutos = produtos.length;
   const produtosEstoqueBaixo = produtos.filter(p => parseInt(p.estoque || 0, 10) < 5).length;
 
+  // Pedidos filtrados (aba Pedidos)
+  const pedidosFiltrados = pedidos.filter(p =>
+    filtroStatusPedido === "Todos" || p.status === filtroStatusPedido
+  ).sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm));
+
+  const statusInfo = (statusValor) =>
+    STATUS_PEDIDO.find(s => s.valor === statusValor) || { label: statusValor || "—", cor: "bg-zinc-100 text-zinc-600" };
+
+  // Métricas para o Dashboard (Home)
+  const pedidosPendentes = pedidos.filter(p => p.status === "pendente").length;
+  const hoje = new Date();
+  const ehMesmoDia = (dataStr) => {
+    const d = new Date(dataStr);
+    return d.getDate() === hoje.getDate() && d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
+  };
+  const ehMesmoMes = (dataStr) => {
+    const d = new Date(dataStr);
+    return d.getMonth() === hoje.getMonth() && d.getFullYear() === hoje.getFullYear();
+  };
+  const pedidosHoje = pedidos.filter(p => p.criadoEm && ehMesmoDia(p.criadoEm));
+  const pedidosMes = pedidos.filter(p => p.criadoEm && ehMesmoMes(p.criadoEm));
+  const faturamentoMes = pedidosMes
+    .filter(p => p.status !== "cancelado")
+    .reduce((soma, p) => soma + (Number(p.total) || 0), 0);
+  const ultimosPedidos = [...pedidos]
+    .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm))
+    .slice(0, 5);
+
   if (isVerificando) {
     return (
       <div className="h-screen bg-zinc-50 flex items-center justify-center text-xs font-bold tracking-widest uppercase text-zinc-500">
@@ -389,11 +484,28 @@ const handleFileUpload = async (e) => {
 
           <nav className="space-y-1">
             <button 
+              onClick={() => { setAbaAtiva('home'); setProdutoEditando(null); }} 
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors cursor-pointer ${abaAtiva === 'home' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}
+            >
+              <FiHome className="text-base" />
+              Início
+            </button>
+            <button 
               onClick={() => { setAbaAtiva('produtos'); setProdutoEditando(null); }} 
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors cursor-pointer ${abaAtiva === 'produtos' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}
             >
               <FiPackage className="text-base" />
               Produtos
+            </button>
+            <button 
+              onClick={() => { setAbaAtiva('pedidos'); setPedidoSelecionado(null); }} 
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors cursor-pointer ${abaAtiva === 'pedidos' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}
+            >
+              <FiShoppingBag className="text-base" />
+              Pedidos
+              {pedidosPendentes > 0 && (
+                <span className="ml-auto bg-amber-400 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full">{pedidosPendentes}</span>
+              )}
             </button>
             <button 
               onClick={() => { setAbaAtiva('categorias'); setProdutoEditando(null); setCategoriaEditando(null); }} 
@@ -426,6 +538,111 @@ const handleFileUpload = async (e) => {
       {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 overflow-y-auto p-10">
         
+        {/* ABA HOME / DASHBOARD */}
+        {abaAtiva === 'home' && (
+          <div className="max-w-6xl mx-auto space-y-6">
+            <header>
+              <h2 className="text-2xl font-normal tracking-tight text-zinc-900">Visão Geral</h2>
+              <p className="text-xs text-zinc-400 mt-0.5 uppercase tracking-wider">Resumo da loja em tempo real</p>
+            </header>
+
+            {/* CARDS PRINCIPAIS */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-2xs flex items-center gap-4">
+                <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg"><FiDollarSign className="text-xl" /></div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">Faturamento do Mês</p>
+                  <p className="text-xl font-bold text-zinc-900">R$ {faturamentoMes.toFixed(2).replace('.', ',')}</p>
+                </div>
+              </div>
+
+              <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-2xs flex items-center gap-4">
+                <div className="p-3 bg-zinc-100 text-zinc-700 rounded-lg"><FiShoppingBag className="text-xl" /></div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">Pedidos Hoje</p>
+                  <p className="text-xl font-bold text-zinc-900">{pedidosHoje.length}</p>
+                </div>
+              </div>
+
+              <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-2xs flex items-center gap-4">
+                <div className="p-3 bg-amber-50 text-amber-600 rounded-lg"><FiClock className="text-xl" /></div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">Pedidos Pendentes</p>
+                  <p className="text-xl font-bold text-amber-600">{pedidosPendentes}</p>
+                </div>
+              </div>
+
+              <div className="bg-white border border-zinc-200 rounded-xl p-5 shadow-2xs flex items-center gap-4">
+                <div className="p-3 bg-zinc-100 text-zinc-700 rounded-lg"><FiPackage className="text-xl" /></div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">Total de Produtos</p>
+                  <p className="text-xl font-bold text-zinc-900">{totalProdutos}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* ÚLTIMOS PEDIDOS */}
+              <div className="lg:col-span-2 bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-hidden">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
+                  <h3 className="text-xs uppercase tracking-widest text-zinc-500 font-bold">Últimos Pedidos</h3>
+                  <button onClick={() => setAbaAtiva('pedidos')} className="text-xs font-semibold text-black hover:underline cursor-pointer">Ver todos</button>
+                </div>
+                {carregandoPedidos ? (
+                  <p className="px-6 py-10 text-center text-zinc-400 text-xs uppercase tracking-wider">Carregando pedidos...</p>
+                ) : ultimosPedidos.length === 0 ? (
+                  <p className="px-6 py-10 text-center text-zinc-400 text-xs uppercase tracking-wider">Nenhum pedido registrado ainda.</p>
+                ) : (
+                  <ul className="divide-y divide-zinc-100">
+                    {ultimosPedidos.map((pedido) => {
+                      const st = statusInfo(pedido.status);
+                      return (
+                        <li
+                          key={pedido.id}
+                          onClick={() => { setAbaAtiva('pedidos'); setPedidoSelecionado(pedido); }}
+                          className="flex items-center justify-between px-6 py-4 hover:bg-zinc-50/50 cursor-pointer transition-colors"
+                        >
+                          <div>
+                            <p className="text-sm font-semibold text-zinc-800">Pedido #{pedido.numero || pedido.id}</p>
+                            <p className="text-xs text-zinc-400">{pedido.cliente?.nome || "Cliente não identificado"}</p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="text-sm font-bold">R$ {Number(pedido.total || 0).toFixed(2).replace('.', ',')}</span>
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider ${st.cor}`}>{st.label}</span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              {/* STATUS DO ESTOQUE */}
+              <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs p-6 h-fit">
+                <h3 className="text-xs uppercase tracking-widest text-zinc-500 font-bold mb-4">Status do Estoque</h3>
+                {totalProdutos === 0 ? (
+                  <p className="text-xs text-zinc-400 uppercase tracking-wider">Sem produtos cadastrados.</p>
+                ) : produtosEstoqueBaixo > 0 ? (
+                  <div className="flex items-center gap-3 text-amber-600">
+                    <FiAlertTriangle className="text-2xl flex-shrink-0" />
+                    <p className="text-sm">
+                      <strong>{produtosEstoqueBaixo}</strong> produto(s) com estoque abaixo de 5 unidades.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 text-emerald-600">
+                    <FiCheckCircle className="text-2xl flex-shrink-0" />
+                    <p className="text-sm">Todos os produtos com estoque saudável.</p>
+                  </div>
+                )}
+                <button onClick={() => setAbaAtiva('produtos')} className="mt-5 w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-700 py-2.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors cursor-pointer">
+                  Gerenciar Produtos
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {abaAtiva === 'produtos' && (
           <>
             {!produtoEditando ? (
@@ -729,6 +946,142 @@ const handleFileUpload = async (e) => {
               </div>
             )}
           </>
+        )}
+
+        {/* ABA PEDIDOS */}
+        {abaAtiva === 'pedidos' && (
+          <div className="max-w-6xl mx-auto space-y-6">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-normal tracking-tight text-zinc-900">Pedidos</h2>
+                <p className="text-xs text-zinc-400 mt-0.5 uppercase tracking-wider">Acompanhe e gerencie os pedidos da loja</p>
+              </div>
+              <div className="w-full sm:w-56">
+                <select
+                  value={filtroStatusPedido}
+                  onChange={(e) => setFiltroStatusPedido(e.target.value)}
+                  className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus:border-black cursor-pointer"
+                >
+                  <option value="Todos">Todos os status</option>
+                  {STATUS_PEDIDO.map(s => (
+                    <option key={s.valor} value={s.valor}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+            </header>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* LISTA DE PEDIDOS */}
+              <div className={`bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-hidden ${pedidoSelecionado ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+                {carregandoPedidos ? (
+                  <p className="px-6 py-16 text-center text-zinc-400 text-xs uppercase tracking-wider">Carregando pedidos...</p>
+                ) : pedidosFiltrados.length === 0 ? (
+                  <p className="px-6 py-16 text-center text-zinc-400 text-xs uppercase tracking-wider">Nenhum pedido encontrado.</p>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-zinc-100 text-[11px] text-zinc-400 uppercase tracking-widest bg-zinc-50/50">
+                        <th className="px-6 py-4 font-semibold">Pedido</th>
+                        <th className="px-6 py-4 font-semibold">Cliente</th>
+                        <th className="px-6 py-4 font-semibold">Total</th>
+                        <th className="px-6 py-4 font-semibold">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-100 text-sm">
+                      {pedidosFiltrados.map((pedido) => {
+                        const st = statusInfo(pedido.status);
+                        return (
+                          <tr
+                            key={pedido.id}
+                            onClick={() => setPedidoSelecionado(pedido)}
+                            className={`cursor-pointer hover:bg-zinc-50/50 transition-colors ${pedidoSelecionado?.id === pedido.id ? 'bg-zinc-50' : ''}`}
+                          >
+                            <td className="px-6 py-4 font-medium text-zinc-800">#{pedido.numero || pedido.id}</td>
+                            <td className="px-6 py-4 text-zinc-600">{pedido.cliente?.nome || "—"}</td>
+                            <td className="px-6 py-4 font-bold text-zinc-900">R$ {Number(pedido.total || 0).toFixed(2).replace('.', ',')}</td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider ${st.cor}`}>{st.label}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* PAINEL DE DETALHES DO PEDIDO */}
+              {pedidoSelecionado && (
+                <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs p-6 h-fit space-y-5">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="text-sm font-bold uppercase tracking-wider">Pedido #{pedidoSelecionado.numero || pedidoSelecionado.id}</h3>
+                      <p className="text-xs text-zinc-400 mt-1">
+                        {pedidoSelecionado.criadoEm ? new Date(pedidoSelecionado.criadoEm).toLocaleString('pt-BR') : "Data não informada"}
+                      </p>
+                    </div>
+                    <button onClick={() => setPedidoSelecionado(null)} className="text-zinc-400 hover:text-black text-xs cursor-pointer">✕</button>
+                  </div>
+
+                  {/* Alterar status */}
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Status do Pedido</label>
+                    <div className="relative">
+                      <select
+                        value={pedidoSelecionado.status}
+                        onChange={(e) => atualizarStatusPedido(pedidoSelecionado.id, e.target.value)}
+                        className="w-full appearance-none border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30 cursor-pointer"
+                      >
+                        {STATUS_PEDIDO.map(s => (
+                          <option key={s.valor} value={s.valor}>{s.label}</option>
+                        ))}
+                      </select>
+                      <FiChevronDown className="absolute right-4 top-3.5 text-zinc-400 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Dados do cliente */}
+                  <div className="border-t border-zinc-100 pt-4">
+                    <h4 className="text-xs uppercase tracking-widest text-zinc-400 font-bold mb-2">Cliente</h4>
+                    <p className="text-sm text-zinc-800">{pedidoSelecionado.cliente?.nome}</p>
+                    <p className="text-xs text-zinc-500">{pedidoSelecionado.cliente?.email}</p>
+                    <p className="text-xs text-zinc-500">{pedidoSelecionado.cliente?.telefone}</p>
+                  </div>
+
+                  {/* Endereço de entrega */}
+                  {pedidoSelecionado.endereco && (
+                    <div className="border-t border-zinc-100 pt-4">
+                      <h4 className="text-xs uppercase tracking-widest text-zinc-400 font-bold mb-2 flex items-center gap-2">
+                        <FiTruck /> Entrega
+                      </h4>
+                      <p className="text-xs text-zinc-600 leading-relaxed">
+                        {pedidoSelecionado.endereco.rua}, {pedidoSelecionado.endereco.numero} — {pedidoSelecionado.endereco.bairro}<br />
+                        {pedidoSelecionado.endereco.cidade}/{pedidoSelecionado.endereco.estado}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Itens do pedido */}
+                  <div className="border-t border-zinc-100 pt-4">
+                    <h4 className="text-xs uppercase tracking-widest text-zinc-400 font-bold mb-3">Itens</h4>
+                    <div className="space-y-2">
+                      {(pedidoSelecionado.itens || []).map((item, idx) => (
+                        <div key={idx} className="flex justify-between text-xs">
+                          <span className="text-zinc-700">{item.quantidade}x {item.nome} <span className="text-zinc-400">({item.tamanho})</span></span>
+                          <span className="font-semibold text-zinc-800">R$ {(item.preco * item.quantidade).toFixed(2).replace('.', ',')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-zinc-100 pt-4 flex justify-between text-sm font-bold">
+                    <span>Total</span>
+                    <span>R$ {Number(pedidoSelecionado.total || 0).toFixed(2).replace('.', ',')}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
         {/* ABA CATEGORIAS */}

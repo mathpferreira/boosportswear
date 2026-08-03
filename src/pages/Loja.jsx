@@ -4,6 +4,8 @@ import {
   FiInstagram, FiMail
 } from 'react-icons/fi';
 
+import logo from "../assets/logo.png";
+
 // COMPONENTE: Card do Produto
 function CardProduto({ produto, onAbrir }) {
   const [imgIndex, setImgIndex] = useState(0);
@@ -354,9 +356,12 @@ export default function Loja() {
               <button onClick={() => setIsMenuAberto(v => !v)} className="md:hidden cursor-pointer hover:opacity-75 transition-opacity">
                 {isMenuAberto ? <FiX className="text-lg" /> : <FiMenu className="text-lg" />}
               </button>
-              <h1 onClick={() => setVisaoAtual('home')} className="text-2xl font-black tracking-[0.3em] uppercase cursor-pointer">
-                BOO
-              </h1>
+              <img
+                onClick={() => setVisaoAtual('home')}
+                src={logo}
+                alt="BOO Sportswear"
+                className="h-10 w-auto cursor-pointer select-none"
+              />
             </div>
 
             <div className="flex items-center gap-5">
