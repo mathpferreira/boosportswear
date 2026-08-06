@@ -25,3 +25,6 @@ boo-api/backup_antes_migracao.sql
 *.njsproj
 *.sln
 *.sw?
+
+boo-api/uploads/
+boo-api/backup_antes_migracao.sql
