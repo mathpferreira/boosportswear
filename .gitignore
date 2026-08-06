@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+boo-api/uploads/
+boo-api/backup_antes_migracao.sql
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
