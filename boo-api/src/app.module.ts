@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ProdutosModule } from './produtos/produtos.module'; // Importou o Módulo
+import { ProdutosModule } from './produtos/produtos.module';
 import { AuthModule } from './auth/auth.module';
 import { CategoriasModule } from './categorias/categorias.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
-  // Coloque o ProdutosModule dentro do array 'imports'
-  imports: [AuthModule, ProdutosModule, CategoriasModule],
+  imports: [AuthModule, ProdutosModule, CategoriasModule, UsersModule],
   controllers: [AppController],
   providers: [AppService],
 })

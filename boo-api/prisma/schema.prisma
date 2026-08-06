@@ -1,8 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
+model Produto {
+  id         String   @id @default(uuid())
+  nome       String
+  preco      Float
+  estoque    Int      @default(0)
+  categoria  String   @default("Geral")
+  esgotado   Boolean  @default(false)
+  ultimaPeca Boolean  @default(false)
+  cores      String[]
+  imgUrl     String   @default("")
+  criadoEm   DateTime @default(now())
+  imagens    Json     @default("[]")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  nome      String
+  email     String   @unique
+  senha     String
+  cpf       String?  @unique
+  telefone  String?
+  role      Role     @default(CLIENTE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Categoria {
+  id       String   @id @default(uuid())
+  nome     String   @unique
+  criadoEm DateTime @default(now())
+}
+
+enum Role {
+  ADMIN
+  CLIENTE
+}
+
+model Pedido {
+  id             String   @id @default(uuid())
+  numero         Int      @default(autoincrement())
+  usuarioId      String?
+  itens          Json     @default("[]")
+  entrega        Json     @default("{}")
+  formaPagamento String
+  frete          Json?
+  total          Float
+  status         String   @default("aguardando_pagamento")
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @updatedAt
 }

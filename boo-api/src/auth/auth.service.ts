@@ -10,8 +10,11 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  // Cadastro de Novo Usuário (Cliente ou Admin)
-  async cadastrar(dados: { nome: string; email: string; senha: string; role?: 'ADMIN' | 'CLIENTE' }) {
+  // Cadastro de Novo Usuário
+  // IMPORTANTE: role NUNCA é aceito do corpo da requisição.
+  // Todo cadastro público nasce como CLIENTE. Promoção a ADMIN
+  // só acontece pelo painel admin (rota protegida), nunca aqui.
+  async cadastrar(dados: { nome: string; email: string; senha: string }) {
     const usuarioExiste = await this.prisma.user.findUnique({ where: { email: dados.email } });
     if (usuarioExiste) {
       throw new BadRequestException('E-mail já cadastrado.');
@@ -24,7 +27,7 @@ export class AuthService {
         nome: dados.nome,
         email: dados.email,
         senha: senhaHash,
-        role: dados.role || 'CLIENTE',
+        role: 'CLIENTE',
       },
     });
 
