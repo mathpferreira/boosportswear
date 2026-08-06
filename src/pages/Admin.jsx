@@ -14,7 +14,9 @@ import {
   FiDollarSign,
   FiTruck,
   FiClock,
-  FiChevronDown
+  FiChevronDown,
+  FiUsers,
+  FiShield
 } from 'react-icons/fi';
 
 export default function Admin() {
@@ -54,6 +56,12 @@ export default function Admin() {
   const [novaCategoriaNome, setNovaCategoriaNome] = useState("");
   const [categoriaEditando, setCategoriaEditando] = useState(null);
   const [categoriaParaExcluir, setCategoriaParaExcluir] = useState(null);
+
+  // Usuários (gerenciamento de acesso admin)
+  const [usuarios, setUsuarios] = useState([]);
+  const [carregandoUsuarios, setCarregandoUsuarios] = useState(true);
+  const [termoBuscaUsuario, setTermoBuscaUsuario] = useState("");
+  const [usuarioParaAlterarRole, setUsuarioParaAlterarRole] = useState(null);
 
   // Configurações de Aparência e Operação
   const [configLoja, setConfigLoja] = useState({
@@ -149,6 +157,57 @@ const dispararToast = (msg, tipo = "sucesso") => {
     }
   };
 
+  // Busca a lista de usuários (rota protegida: exige token de ADMIN)
+  const carregarUsuarios = async () => {
+    setCarregandoUsuarios(true);
+    try {
+      const token = localStorage.getItem('@BOO:token');
+      const res = await fetch(`${API_URL}/admin/usuarios`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUsuarios(data);
+      } else if (res.status === 403) {
+        dispararToast("Você não tem permissão para ver os usuários.", "erro");
+      } else {
+        dispararToast("Não foi possível carregar os usuários.", "erro");
+      }
+    } catch (e) {
+      console.error("Erro ao carregar usuários:", e);
+      dispararToast("Erro de conexão ao carregar usuários.", "erro");
+    } finally {
+      setCarregandoUsuarios(false);
+    }
+  };
+
+  // Promove ou rebaixa um usuário (CLIENTE <-> ADMIN)
+  const alterarRoleUsuario = async (usuarioId, novaRole) => {
+    try {
+      const token = localStorage.getItem('@BOO:token');
+      const res = await fetch(`${API_URL}/admin/usuarios/${usuarioId}/role`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ role: novaRole })
+      });
+      if (res.ok) {
+        setUsuarios(prev => prev.map(u => u.id === usuarioId ? { ...u, role: novaRole } : u));
+        dispararToast(novaRole === 'ADMIN' ? "Usuário promovido a administrador!" : "Acesso de administrador removido.");
+      } else {
+        const erro = await res.json().catch(() => ({}));
+        dispararToast(erro.message || "Erro ao atualizar permissão do usuário.", "erro");
+      }
+    } catch (e) {
+      console.error("Erro ao atualizar role:", e);
+      dispararToast("Erro de conexão ao atualizar usuário.", "erro");
+    } finally {
+      setUsuarioParaAlterarRole(null);
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('@BOO:token');
     const usuarioSalvo = localStorage.getItem('@BOO:usuario');
@@ -168,6 +227,7 @@ const dispararToast = (msg, tipo = "sucesso") => {
     carregarProdutos();
     carregarCategorias();
     carregarPedidos();
+    carregarUsuarios();
 
     const configSalva = localStorage.getItem('@LojaDaBia:config');
     if (configSalva) {
@@ -513,6 +573,13 @@ const handleFileUpload = async (e) => {
             >
               <FiTag className="text-base" />
               Categorias
+            </button>
+            <button 
+              onClick={() => { setAbaAtiva('usuarios'); setUsuarioParaAlterarRole(null); }} 
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors cursor-pointer ${abaAtiva === 'usuarios' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}
+            >
+              <FiUsers className="text-base" />
+              Usuários
             </button>
             <button 
               onClick={() => { setAbaAtiva('configuracoes'); setProdutoEditando(null); }} 
@@ -1150,6 +1217,123 @@ const handleFileUpload = async (e) => {
                 </ul>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ABA USUÁRIOS */}
+        {abaAtiva === 'usuarios' && (
+          <div className="max-w-4xl mx-auto">
+            <header className="mb-8 flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-normal tracking-tight">Usuários</h2>
+                <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider">Gerencie contas e permissões de acesso.</p>
+              </div>
+              <div className="relative">
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nome ou e-mail..."
+                  value={termoBuscaUsuario}
+                  onChange={(e) => setTermoBuscaUsuario(e.target.value)}
+                  className="pl-9 pr-4 py-2 border border-zinc-200 rounded-lg text-sm w-72 focus:outline-none focus:border-black"
+                />
+              </div>
+            </header>
+
+            {carregandoUsuarios ? (
+              <p className="text-sm text-zinc-400">Carregando usuários...</p>
+            ) : (
+              <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-100 text-left text-[10px] uppercase tracking-wider text-zinc-400">
+                      <th className="px-6 py-3 font-medium">Nome</th>
+                      <th className="px-6 py-3 font-medium">E-mail</th>
+                      <th className="px-6 py-3 font-medium">Cadastrado em</th>
+                      <th className="px-6 py-3 font-medium">Permissão</th>
+                      <th className="px-6 py-3 font-medium text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usuarios
+                      .filter(u =>
+                        u.nome.toLowerCase().includes(termoBuscaUsuario.toLowerCase()) ||
+                        u.email.toLowerCase().includes(termoBuscaUsuario.toLowerCase())
+                      )
+                      .map(u => (
+                        <tr key={u.id} className="border-b border-zinc-50 last:border-0 hover:bg-zinc-50">
+                          <td className="px-6 py-4 font-medium text-zinc-800">{u.nome}</td>
+                          <td className="px-6 py-4 text-zinc-500">{u.email}</td>
+                          <td className="px-6 py-4 text-zinc-500">
+                            {new Date(u.createdAt).toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="px-6 py-4">
+                            {u.role === 'ADMIN' ? (
+                              <span className="inline-flex items-center gap-1 bg-black text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full">
+                                <FiShield className="text-[11px]" /> Admin
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center bg-zinc-100 text-zinc-600 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full">
+                                Cliente
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button
+                              onClick={() => setUsuarioParaAlterarRole(u)}
+                              className="text-black font-semibold hover:underline text-xs tracking-wider uppercase cursor-pointer"
+                            >
+                              {u.role === 'ADMIN' ? 'Remover admin' : 'Tornar admin'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+
+                {usuarios.length === 0 && (
+                  <p className="text-sm text-zinc-400 text-center py-10">Nenhum usuário encontrado.</p>
+                )}
+              </div>
+            )}
+
+            {/* Modal de confirmação para alterar permissão */}
+            {usuarioParaAlterarRole && (
+              <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+                <div className="bg-white rounded-xl p-6 max-w-sm w-full">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2.5 bg-amber-50 text-amber-500 rounded-lg">
+                      <FiAlertTriangle className="text-lg" />
+                    </div>
+                    <h3 className="font-semibold text-zinc-800">Confirmar alteração</h3>
+                  </div>
+                  <p className="text-sm text-zinc-500 mb-6">
+                    {usuarioParaAlterarRole.role === 'ADMIN' ? (
+                      <>Tem certeza que deseja remover o acesso de administrador de <strong>{usuarioParaAlterarRole.nome}</strong>?</>
+                    ) : (
+                      <>Tem certeza que deseja tornar <strong>{usuarioParaAlterarRole.nome}</strong> um administrador? Essa pessoa passará a ter acesso total ao painel.</>
+                    )}
+                  </p>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={() => setUsuarioParaAlterarRole(null)}
+                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 hover:bg-zinc-100 rounded-lg cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => alterarRoleUsuario(
+                        usuarioParaAlterarRole.id,
+                        usuarioParaAlterarRole.role === 'ADMIN' ? 'CLIENTE' : 'ADMIN'
+                      )}
+                      className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-black text-white rounded-lg hover:bg-zinc-800 cursor-pointer"
+                    >
+                      Confirmar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
