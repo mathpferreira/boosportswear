@@ -102,6 +102,16 @@ export default function Loja() {
   const [erroPedido, setErroPedido] = useState(null);
   const [numeroPedido, setNumeroPedido] = useState(null);
 
+  // Meus Pedidos
+  const [meusPedidos, setMeusPedidos] = useState([]);
+  const [carregandoPedidos, setCarregandoPedidos] = useState(false);
+  const [pedidoExpandido, setPedidoExpandido] = useState(null);
+
+  // Minha Conta
+  const [dadosConta, setDadosConta] = useState({ nome: "", email: "", telefone: "" });
+  const [salvandoConta, setSalvandoConta] = useState(false);
+  const [mensagemConta, setMensagemConta] = useState(null);
+
   // Configurações da Loja
   const [configLoja, setConfigLoja] = useState({
     fraseTopo: "FRETE GRÁTIS A PARTIR DE R$ 250 • PARCELAMENTO EM ATÉ 3X SEM JUROS",
@@ -223,6 +233,79 @@ export default function Loja() {
 
   const handleChangeEntrega = (campo) => (e) => {
     setDadosEntrega(prev => ({ ...prev, [campo]: e.target.value }));
+  };
+
+  const carregarMeusPedidos = async () => {
+    setCarregandoPedidos(true);
+    try {
+      const token = localStorage.getItem('token');
+      const resposta = await fetch(`${API_URL}/meus-pedidos`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (resposta.ok) {
+        const dados = await resposta.json();
+        setMeusPedidos(dados);
+      }
+    } catch (erro) {
+      console.error("Erro ao carregar pedidos:", erro);
+    } finally {
+      setCarregandoPedidos(false);
+    }
+  };
+
+  const carregarMinhaConta = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const resposta = await fetch(`${API_URL}/minha-conta`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (resposta.ok) {
+        const dados = await resposta.json();
+        setDadosConta({
+          nome: dados.nome || "",
+          email: dados.email || "",
+          telefone: dados.telefone || ""
+        });
+      }
+    } catch (erro) {
+      console.error("Erro ao carregar conta:", erro);
+    }
+  };
+
+  const salvarMinhaConta = async (e) => {
+    e.preventDefault();
+    setSalvandoConta(true);
+    setMensagemConta(null);
+    try {
+      const token = localStorage.getItem('token');
+      const resposta = await fetch(`${API_URL}/minha-conta`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify(dadosConta)
+      });
+      const dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.message || "Erro ao salvar.");
+
+      setMensagemConta({ tipo: "sucesso", texto: "Dados atualizados com sucesso!" });
+      const usuarioAtualizado = { ...usuarioLogado, ...dados };
+      setUsuarioLogado(usuarioAtualizado);
+      localStorage.setItem('usuario', JSON.stringify(usuarioAtualizado));
+    } catch (erro) {
+      setMensagemConta({ tipo: "erro", texto: erro.message });
+    } finally {
+      setSalvandoConta(false);
+    }
+  };
+
+  const statusLabels = {
+    aguardando_pagamento: { texto: "Aguardando Pagamento", cor: "text-amber-600 bg-amber-50" },
+    pago: { texto: "Pago", cor: "text-green-700 bg-green-50" },
+    enviado: { texto: "Enviado", cor: "text-blue-700 bg-blue-50" },
+    entregue: { texto: "Entregue", cor: "text-zinc-700 bg-zinc-100" },
+    cancelado: { texto: "Cancelado", cor: "text-red-700 bg-red-50" }
   };
 
   const finalizarPedido = async (e) => {
@@ -410,13 +493,34 @@ export default function Loja() {
                         <p className="text-xs font-bold text-zinc-900 truncate">{usuarioLogado.nome || 'Cliente'}</p>
                         <p className="text-[10px] text-zinc-500 truncate mt-0.5">{usuarioLogado.email}</p>
                       </div>
-                      <button onClick={() => setIsUserMenuAberto(false)} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors">Minha Conta</button>
-                      <button onClick={() => setIsUserMenuAberto(false)} className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors">Meus Pedidos</button>
+                      <button
+                        onClick={() => {
+                          setIsUserMenuAberto(false);
+                          setMensagemConta(null);
+                          carregarMinhaConta();
+                          setVisaoAtual('conta');
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors"
+                      >
+                        Minha Conta
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsUserMenuAberto(false);
+                          carregarMeusPedidos();
+                          setVisaoAtual('pedidos');
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors"
+                      >
+                        Meus Pedidos
+                      </button>
                       <button 
                         onClick={logout} 
                         className="w-full text-left px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 uppercase tracking-wider mt-1 border-t border-zinc-50 transition-colors"
                       >
-                        Sair da Conta
+                        Sair
                       </button>
                     </div>
                   </>
@@ -617,6 +721,151 @@ export default function Loja() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {visaoAtual === 'conta' && (
+            <div className="max-w-xl mx-auto px-6 py-12 animate-slideUpFade">
+              <div className="flex justify-between items-center mb-8 border-b border-zinc-100 pb-4">
+                <h2 className="text-2xl font-black uppercase tracking-wider">Minha Conta</h2>
+                <button onClick={() => setVisaoAtual('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors">Voltar</button>
+              </div>
+
+              <form onSubmit={salvarMinhaConta} className="border border-zinc-100 p-6 rounded-lg shadow-sm space-y-4">
+                <div>
+                  <label className={labelClasses}>Nome Completo</label>
+                  <input
+                    required
+                    value={dadosConta.nome}
+                    onChange={(e) => setDadosConta(prev => ({ ...prev, nome: e.target.value }))}
+                    className={inputClasses}
+                  />
+                </div>
+                <div>
+                  <label className={labelClasses}>E-mail</label>
+                  <input
+                    type="email"
+                    required
+                    value={dadosConta.email}
+                    onChange={(e) => setDadosConta(prev => ({ ...prev, email: e.target.value }))}
+                    className={inputClasses}
+                  />
+                </div>
+                <div>
+                  <label className={labelClasses}>Telefone</label>
+                  <input
+                    value={dadosConta.telefone}
+                    onChange={(e) => setDadosConta(prev => ({ ...prev, telefone: e.target.value }))}
+                    className={inputClasses}
+                    placeholder="(00) 00000-0000"
+                  />
+                </div>
+
+                {mensagemConta && (
+                  <p className={`text-[10px] font-bold uppercase p-3 rounded ${mensagemConta.tipo === "sucesso" ? "text-green-700 bg-green-50" : "text-red-500 bg-red-50"}`}>
+                    {mensagemConta.texto}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={salvandoConta}
+                  className="w-full bg-black text-white py-3.5 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 disabled:opacity-50 transition-colors mt-2"
+                >
+                  {salvandoConta ? "Salvando..." : "Salvar Alterações"}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {visaoAtual === 'pedidos' && (
+            <div className="max-w-3xl mx-auto px-6 py-12 animate-slideUpFade">
+              <div className="flex justify-between items-center mb-8 border-b border-zinc-100 pb-4">
+                <h2 className="text-2xl font-black uppercase tracking-wider">Meus Pedidos</h2>
+                <button onClick={() => setVisaoAtual('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors">Voltar</button>
+              </div>
+
+              {carregandoPedidos ? (
+                <div className="text-center py-20 text-zinc-400 text-xs tracking-widest uppercase">Carregando pedidos...</div>
+              ) : meusPedidos.length === 0 ? (
+                <div className="text-center py-32 text-zinc-400 animate-fadeIn">
+                  <p className="text-sm uppercase tracking-widest mb-6">Você ainda não fez nenhum pedido.</p>
+                  <button onClick={() => setVisaoAtual('home')} className="border border-black text-black px-6 py-3 text-xs font-bold uppercase tracking-widest hover:bg-zinc-50 transition-colors">Ver Produtos</button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {meusPedidos.map((pedido) => {
+                    const status = statusLabels[pedido.status] || { texto: pedido.status, cor: "text-zinc-700 bg-zinc-100" };
+                    const aberto = pedidoExpandido === pedido.id;
+                    return (
+                      <div key={pedido.id} className="border border-zinc-100 rounded-lg shadow-sm overflow-hidden">
+                        <button
+                          onClick={() => setPedidoExpandido(aberto ? null : pedido.id)}
+                          className="w-full flex items-center justify-between p-5 text-left hover:bg-zinc-50 transition-colors"
+                        >
+                          <div>
+                            <p className="text-sm font-bold uppercase">Pedido nº {pedido.numero}</p>
+                            <p className="text-[10px] text-zinc-500 uppercase tracking-wider mt-1">
+                              {new Date(pedido.criadoEm).toLocaleDateString('pt-BR')}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className={`text-[10px] font-bold uppercase px-3 py-1.5 rounded-full ${status.cor}`}>
+                              {status.texto}
+                            </span>
+                            <span className="text-sm font-black">
+                              R$ {Number(pedido.total).toFixed(2).replace('.', ',')}
+                            </span>
+                          </div>
+                        </button>
+
+                        {aberto && (
+                          <div className="border-t border-zinc-100 p-5 space-y-5 animate-fadeIn bg-zinc-50">
+                            <div>
+                              <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-3">Itens</p>
+                              <div className="space-y-3">
+                                {(pedido.itens || []).map((item, idx) => (
+                                  <div key={idx} className="flex gap-3 items-center">
+                                    <img src={item.imgUrl} alt={item.nome} className="w-14 h-16 object-cover rounded bg-zinc-100" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-bold uppercase">{item.nome}</p>
+                                      <p className="text-[10px] text-zinc-500 uppercase mt-0.5">
+                                        Tamanho: {item.tamanhoEscolhido} · Qtd: {item.quantidade}
+                                      </p>
+                                    </div>
+                                    <p className="text-xs font-bold">
+                                      R$ {(item.preco * item.quantidade).toFixed(2).replace('.', ',')}
+                                    </p>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {pedido.entrega && (
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 mb-2">Endereço de Entrega</p>
+                                <p className="text-xs text-zinc-700">
+                                  {pedido.entrega.rua}, {pedido.entrega.numero}
+                                  {pedido.entrega.complemento ? ` - ${pedido.entrega.complemento}` : ""}
+                                  <br />
+                                  {pedido.entrega.bairro} · {pedido.entrega.cidade}/{pedido.entrega.estado}
+                                  <br />
+                                  CEP: {pedido.entrega.cep}
+                                </p>
+                              </div>
+                            )}
+
+                            <div className="flex justify-between text-xs pt-3 border-t border-zinc-200">
+                              <span className="text-zinc-500 uppercase font-bold">Forma de Pagamento</span>
+                              <span className="font-bold uppercase">{pedido.formaPagamento === "pix" ? "Pix" : "Cartão de Crédito"}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
