@@ -286,7 +286,7 @@ export default function Loja() {
     }
 
     try {
-      const endpoint = isRegistro ? `${API_URL}/auth/register` : `${API_URL}/auth/login`;
+      const endpoint = isRegistro ? `${API_URL}/auth/cadastro` : `${API_URL}/auth/login`;
       const body = isRegistro 
         ? JSON.stringify({ nome: nomeRegistro, email: emailLogin, senha: senhaLogin })
         : JSON.stringify({ email: emailLogin, senha: senhaLogin });
