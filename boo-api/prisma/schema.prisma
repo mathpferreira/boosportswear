@@ -57,3 +57,12 @@ model Pedido {
   criadoEm       DateTime @default(now())
   atualizadoEm   DateTime @updatedAt
 }
+
+model Configuracao {
+  id           String   @id @default(uuid())
+  lojaAberta   Boolean  @default(true)
+  fraseTopo    String   @default("FRETE GRÁTIS ACIMA DE R$ 299")
+  instagramUrl String   @default("")
+  emailSuporte String   @default("")
+  atualizadoEm DateTime @updatedAt
+}

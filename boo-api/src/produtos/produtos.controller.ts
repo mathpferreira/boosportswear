@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import * as sharp from 'sharp';
+import sharp from 'sharp';
 import { unlink, rename } from 'fs/promises';
 import { ProdutosService } from './produtos.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
