@@ -103,6 +103,10 @@ export default function Loja() {
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [erroPedido, setErroPedido] = useState(null);
   const [numeroPedido, setNumeroPedido] = useState(null);
+  const [codigoCupom, setCodigoCupom] = useState("");
+  const [cupomAplicado, setCupomAplicado] = useState(null);
+  const [erroCupom, setErroCupom] = useState(null);
+  const [aplicandoCupom, setAplicandoCupom] = useState(false);
 
   // Meus Pedidos
   const [meusPedidos, setMeusPedidos] = useState([]);
@@ -275,7 +279,8 @@ export default function Loja() {
   };
 
   const totalCarrinho = carrinho.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
-  const totalComFrete = totalCarrinho + (freteResultado?.valor || 0);
+  const descontoCupom = cupomAplicado?.descontoAplicado || 0;
+  const totalComFrete = Math.max(totalCarrinho - descontoCupom, 0) + (freteResultado?.valor || 0);
 
   const irParaEntrega = () => {
     if (usuarioLogado) {
@@ -298,6 +303,29 @@ export default function Loja() {
 
   const handleChangeEntrega = (campo) => (e) => {
     setDadosEntrega(prev => ({ ...prev, [campo]: e.target.value }));
+  };
+
+  const aplicarCupom = async () => {
+    if (!codigoCupom.trim()) return;
+    setAplicandoCupom(true);
+    setErroCupom(null);
+    try {
+      const resposta = await fetch(`${API_URL}/cupons/validar?codigo=${encodeURIComponent(codigoCupom.trim())}&subtotal=${totalCarrinho}`);
+      const dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.message || "Cupom inválido.");
+      setCupomAplicado(dados);
+    } catch (erro) {
+      setCupomAplicado(null);
+      setErroCupom(erro.message);
+    } finally {
+      setAplicandoCupom(false);
+    }
+  };
+
+  const removerCupom = () => {
+    setCodigoCupom("");
+    setCupomAplicado(null);
+    setErroCupom(null);
   };
 
   const carregarMeusPedidos = async () => {
@@ -404,6 +432,7 @@ export default function Loja() {
           entrega: dadosEntrega,
           formaPagamento,
           frete: freteResultado,
+          cupom: cupomAplicado,
           total: totalComFrete,
           usuarioId: usuarioLogado?.id || null
         })
@@ -412,6 +441,8 @@ export default function Loja() {
       const dados = await resposta.json();
       setNumeroPedido(dados.numeroPedido || dados.id || "—");
       setCarrinho([]);
+      setCupomAplicado(null);
+      setCodigoCupom("");
       setEtapaSacola("confirmado");
     } catch (erro) {
       setErroPedido("Não foi possível concluir o pedido agora. Tente novamente.");
@@ -651,7 +682,7 @@ export default function Loja() {
                         <button
                           onClick={() => {
                             setIsUserMenuAberto(false);
-                            window.location.href = '/admin';
+                            window.open('/admin', '_blank', 'noopener,noreferrer');
                           }}
                           className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors"
                         >
@@ -850,6 +881,35 @@ export default function Loja() {
                     <h3 className="font-bold uppercase border-b border-zinc-200 pb-3 mb-4">Resumo do Pedido</h3>
                     <div className="space-y-3 mb-6">
                       <div className="flex justify-between text-sm text-zinc-600"><span>Subtotal</span><span>R$ {totalCarrinho.toFixed(2).replace('.', ',')}</span></div>
+                      <div className="rounded-lg border border-zinc-200 bg-white p-3 space-y-3">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Cupom</p>
+                        {cupomAplicado ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-bold">{cupomAplicado.codigo}</span>
+                              <button onClick={removerCupom} className="text-[10px] font-bold uppercase text-red-500 hover:underline">Remover</button>
+                            </div>
+                            <div className="flex justify-between text-sm text-green-700">
+                              <span>Desconto aplicado</span>
+                              <span>- R$ {descontoCupom.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <input
+                              value={codigoCupom}
+                              onChange={(e) => setCodigoCupom(e.target.value.toUpperCase())}
+                              placeholder="Digite seu cupom"
+                              className="flex-1 border border-zinc-200 rounded px-3 py-2 text-xs focus:outline-none focus:border-black"
+                            />
+                            <button type="button" onClick={aplicarCupom} disabled={aplicandoCupom} className="px-4 py-2 bg-black text-white rounded text-[10px] font-bold uppercase tracking-widest disabled:opacity-50">
+                              {aplicandoCupom ? "..." : "Aplicar"}
+                            </button>
+                          </div>
+                        )}
+                        {erroCupom && <p className="text-[10px] font-bold uppercase text-red-500">{erroCupom}</p>}
+                      </div>
+                      {cupomAplicado && <div className="flex justify-between text-sm text-green-700"><span>Desconto</span><span>- R$ {descontoCupom.toFixed(2).replace('.', ',')}</span></div>}
                       {freteResultado && <div className="flex justify-between text-sm text-zinc-600"><span>Frete</span><span>R$ {freteResultado.valor.toFixed(2).replace('.', ',')}</span></div>}
                       <div className="flex justify-between text-lg font-black pt-3 border-t border-zinc-200"><span>Total</span><span>R$ {totalComFrete.toFixed(2).replace('.', ',')}</span></div>
                     </div>
@@ -1109,7 +1169,7 @@ export default function Loja() {
 
                       {isAdmin && (
                         <button
-                          onClick={() => { window.location.href = '/admin'; }}
+                          onClick={() => { window.open('/admin', '_blank', 'noopener,noreferrer'); }}
                           className="w-full flex items-center justify-between rounded-xl bg-black text-white px-4 py-3 text-left hover:bg-zinc-800 transition-colors"
                         >
                           <div>

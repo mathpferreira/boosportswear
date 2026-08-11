@@ -16,7 +16,9 @@ import {
   FiClock,
   FiChevronDown,
   FiUsers,
-  FiShield
+  FiShield,
+  FiMoreVertical,
+  FiArrowLeft
 } from 'react-icons/fi';
 
 export default function Admin() {
@@ -34,7 +36,7 @@ export default function Admin() {
   const [paginaAtual, setPaginaAtual] = useState(1);
   const itensPorPagina = 8;
 
-  // Abas: 'home', 'produtos', 'pedidos', 'categorias' ou 'configuracoes'
+  // Abas: 'home', 'produtos', 'pedidos', 'categorias', 'usuarios', 'cupons' ou 'configuracoes'
   const [abaAtiva, setAbaAtiva] = useState('home');
 
   // Pedidos
@@ -62,6 +64,19 @@ export default function Admin() {
   const [carregandoUsuarios, setCarregandoUsuarios] = useState(true);
   const [termoBuscaUsuario, setTermoBuscaUsuario] = useState("");
   const [usuarioParaAlterarRole, setUsuarioParaAlterarRole] = useState(null);
+  const [menuUsuarioAberto, setMenuUsuarioAberto] = useState(null);
+
+  // Cupons
+  const [cupons, setCupons] = useState([]);
+  const [carregandoCupons, setCarregandoCupons] = useState(true);
+  const [novoCupom, setNovoCupom] = useState({
+    nome: "",
+    codigo: "",
+    tipo: "PERCENTUAL",
+    valor: "",
+    expiraEm: "",
+    usosMaximos: ""
+  });
 
   // Configurações de Aparência e Operação
   const [configLoja, setConfigLoja] = useState({
@@ -79,6 +94,14 @@ const dispararToast = (msg, tipo = "sucesso") => {
   setToast({ show: true, msg, tipo });
   setTimeout(() => setToast({ show: false, msg: "", tipo: "sucesso" }), 3500);
 };
+
+  const normalizarInstagram = (valor) => {
+    const texto = valor.trim();
+    if (!texto) return "";
+    if (texto.startsWith('@')) return `https://instagram.com/${texto.slice(1)}`;
+    if (!texto.startsWith('http')) return `https://instagram.com/${texto.replace(/^\/+/, '')}`;
+    return texto;
+  };
 
   const carregarProdutos = async () => {
     try {
@@ -181,6 +204,48 @@ const dispararToast = (msg, tipo = "sucesso") => {
     }
   };
 
+  const carregarConfiguracoes = async () => {
+    try {
+      const token = localStorage.getItem('@BOO:token');
+      const res = await fetch(`${API_URL}/admin/configuracoes`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setConfigLoja({
+          fraseTopo: data.fraseTopo || "",
+          instagramUrl: data.instagramUrl || "",
+          emailSuporte: data.emailSuporte || "",
+          lojaAberta: data.lojaAberta ?? true
+        });
+      }
+    } catch (e) {
+      console.error("Erro ao carregar configurações:", e);
+      dispararToast("Erro de conexão ao carregar configurações.", "erro");
+    }
+  };
+
+  const carregarCupons = async () => {
+    setCarregandoCupons(true);
+    try {
+      const token = localStorage.getItem('@BOO:token');
+      const res = await fetch(`${API_URL}/admin/cupons`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCupons(data);
+      } else {
+        dispararToast("Não foi possível carregar os cupons.", "erro");
+      }
+    } catch (e) {
+      console.error("Erro ao carregar cupons:", e);
+      dispararToast("Erro de conexão ao carregar cupons.", "erro");
+    } finally {
+      setCarregandoCupons(false);
+    }
+  };
+
   // Promove ou rebaixa um usuário (CLIENTE <-> ADMIN)
   const alterarRoleUsuario = async (usuarioId, novaRole) => {
     try {
@@ -228,11 +293,8 @@ const dispararToast = (msg, tipo = "sucesso") => {
     carregarCategorias();
     carregarPedidos();
     carregarUsuarios();
-
-    const configSalva = localStorage.getItem('@LojaDaBia:config');
-    if (configSalva) {
-      setConfigLoja(JSON.parse(configSalva));
-    }
+    carregarConfiguracoes();
+    carregarCupons();
   }, []);
 
   const criarNovoProduto = () => {
@@ -380,10 +442,123 @@ const handleFileUpload = async (e) => {
     }
   };
 
-  const salvarConfiguracoes = (e) => {
+  const salvarConfiguracoes = async (e) => {
     e.preventDefault();
-    localStorage.setItem('@LojaDaBia:config', JSON.stringify(configLoja));
-    dispararToast("Configurações atualizadas com sucesso!");
+    try {
+      const token = localStorage.getItem('@BOO:token');
+      const payload = {
+        ...configLoja,
+        instagramUrl: normalizarInstagram(configLoja.instagramUrl),
+      };
+
+      const res = await fetch(`${API_URL}/admin/configuracoes`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setConfigLoja({
+          fraseTopo: data.fraseTopo || "",
+          instagramUrl: data.instagramUrl || "",
+          emailSuporte: data.emailSuporte || "",
+          lojaAberta: data.lojaAberta ?? true
+        });
+        dispararToast("Configurações atualizadas com sucesso!");
+      } else {
+        dispararToast("Não foi possível salvar as configurações.", "erro");
+      }
+    } catch (e) {
+      console.error("Erro ao salvar configurações:", e);
+      dispararToast("Erro de conexão ao salvar configurações.", "erro");
+    }
+  };
+
+  const criarCupom = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('@BOO:token');
+      const res = await fetch(`${API_URL}/admin/cupons`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          nome: novoCupom.nome,
+          codigo: novoCupom.codigo,
+          tipo: novoCupom.tipo,
+          valor: Number(novoCupom.valor),
+          expiraEm: novoCupom.expiraEm || undefined,
+          usosMaximos: novoCupom.usosMaximos ? Number(novoCupom.usosMaximos) : null
+        })
+      });
+
+      if (res.ok) {
+        setNovoCupom({
+          nome: "",
+          codigo: "",
+          tipo: "PERCENTUAL",
+          valor: "",
+          expiraEm: "",
+          usosMaximos: ""
+        });
+        await carregarCupons();
+        dispararToast("Cupom criado com sucesso!");
+      } else {
+        const erro = await res.json().catch(() => ({}));
+        dispararToast(erro.message || "Erro ao criar cupom.", "erro");
+      }
+    } catch (e) {
+      console.error("Erro ao criar cupom:", e);
+      dispararToast("Erro de conexão ao criar cupom.", "erro");
+    }
+  };
+
+  const alternarStatusCupom = async (cupom) => {
+    try {
+      const token = localStorage.getItem('@BOO:token');
+      const res = await fetch(`${API_URL}/admin/cupons/${cupom.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ ativo: !cupom.ativo })
+      });
+      if (res.ok) {
+        await carregarCupons();
+        dispararToast(!cupom.ativo ? "Cupom ativado!" : "Cupom pausado!");
+      } else {
+        dispararToast("Erro ao atualizar cupom.", "erro");
+      }
+    } catch (e) {
+      console.error("Erro ao atualizar cupom:", e);
+      dispararToast("Erro de conexão ao atualizar cupom.", "erro");
+    }
+  };
+
+  const excluirCupom = async (cupomId) => {
+    try {
+      const token = localStorage.getItem('@BOO:token');
+      const res = await fetch(`${API_URL}/admin/cupons/${cupomId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        await carregarCupons();
+        dispararToast("Cupom excluído com sucesso!");
+      } else {
+        dispararToast("Erro ao excluir cupom.", "erro");
+      }
+    } catch (e) {
+      console.error("Erro ao excluir cupom:", e);
+      dispararToast("Erro de conexão ao excluir cupom.", "erro");
+    }
   };
 
   // ---- Gerenciamento de Categorias ----
@@ -510,6 +685,16 @@ const handleFileUpload = async (e) => {
     .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm))
     .slice(0, 5);
 
+  const usuariosFiltrados = usuarios.filter(u =>
+    u.nome.toLowerCase().includes(termoBuscaUsuario.toLowerCase()) ||
+    u.email.toLowerCase().includes(termoBuscaUsuario.toLowerCase())
+  );
+
+  const abrirConfirmacaoRole = (usuario, roleDestino) => {
+    setMenuUsuarioAberto(null);
+    setUsuarioParaAlterarRole({ ...usuario, roleDestino });
+  };
+
   if (isVerificando) {
     return (
       <div className="h-screen bg-zinc-50 flex items-center justify-center text-xs font-bold tracking-widest uppercase text-zinc-500">
@@ -588,10 +773,24 @@ const handleFileUpload = async (e) => {
               <FiSettings className="text-base" />
               Configurações
             </button>
+            <button 
+              onClick={() => { setAbaAtiva('cupons'); }} 
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors cursor-pointer ${abaAtiva === 'cupons' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}
+            >
+              <FiDollarSign className="text-base" />
+              Cupons
+            </button>
           </nav>
         </div>
 
         <div className="pt-6 border-t border-zinc-100">
+          <button
+            onClick={() => { window.open('/', '_blank', 'noopener,noreferrer'); }}
+            className="w-full flex items-center gap-3 px-4 py-2 mb-2 text-zinc-600 hover:bg-zinc-100 rounded-lg text-xs tracking-wider uppercase font-medium transition-colors cursor-pointer"
+          >
+            <FiArrowLeft className="text-base" />
+            Voltar ao Site
+          </button>
           <button 
             onClick={() => { localStorage.clear(); window.location.href='/login'; }}
             className="w-full flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-xs tracking-wider uppercase font-medium transition-colors cursor-pointer"
@@ -1255,12 +1454,7 @@ const handleFileUpload = async (e) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {usuarios
-                      .filter(u =>
-                        u.nome.toLowerCase().includes(termoBuscaUsuario.toLowerCase()) ||
-                        u.email.toLowerCase().includes(termoBuscaUsuario.toLowerCase())
-                      )
-                      .map(u => (
+                    {usuariosFiltrados.map(u => (
                         <tr key={u.id} className="border-b border-zinc-50 last:border-0 hover:bg-zinc-50">
                           <td className="px-6 py-4 font-medium text-zinc-800">{u.nome}</td>
                           <td className="px-6 py-4 text-zinc-500">{u.email}</td>
@@ -1279,19 +1473,41 @@ const handleFileUpload = async (e) => {
                             )}
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button
-                              onClick={() => setUsuarioParaAlterarRole(u)}
-                              className="text-black font-semibold hover:underline text-xs tracking-wider uppercase cursor-pointer"
-                            >
-                              {u.role === 'ADMIN' ? 'Remover admin' : 'Tornar admin'}
-                            </button>
+                            <div className="relative inline-flex justify-end">
+                              <button
+                                onClick={() => setMenuUsuarioAberto(menuUsuarioAberto === u.id ? null : u.id)}
+                                className="w-9 h-9 inline-flex items-center justify-center rounded-full hover:bg-zinc-100 text-zinc-500 hover:text-black transition-colors cursor-pointer"
+                                aria-label={`Abrir ações de ${u.nome}`}
+                              >
+                                <FiMoreVertical />
+                              </button>
+
+                              {menuUsuarioAberto === u.id && (
+                                <div className="absolute right-0 top-11 z-20 w-52 rounded-xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
+                                  <button
+                                    onClick={() => abrirConfirmacaoRole(u, 'ADMIN')}
+                                    disabled={u.role === 'ADMIN'}
+                                    className="w-full text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                                  >
+                                    Tornar Administrador
+                                  </button>
+                                  <button
+                                    onClick={() => abrirConfirmacaoRole(u, 'CLIENTE')}
+                                    disabled={u.role === 'CLIENTE'}
+                                    className="w-full text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                                  >
+                                    Tornar Usuário
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
                   </tbody>
                 </table>
 
-                {usuarios.length === 0 && (
+                {usuariosFiltrados.length === 0 && (
                   <p className="text-sm text-zinc-400 text-center py-10">Nenhum usuário encontrado.</p>
                 )}
               </div>
@@ -1308,7 +1524,7 @@ const handleFileUpload = async (e) => {
                     <h3 className="font-semibold text-zinc-800">Confirmar alteração</h3>
                   </div>
                   <p className="text-sm text-zinc-500 mb-6">
-                    {usuarioParaAlterarRole.role === 'ADMIN' ? (
+                    {usuarioParaAlterarRole.roleDestino === 'CLIENTE' ? (
                       <>Tem certeza que deseja remover o acesso de administrador de <strong>{usuarioParaAlterarRole.nome}</strong>?</>
                     ) : (
                       <>Tem certeza que deseja tornar <strong>{usuarioParaAlterarRole.nome}</strong> um administrador? Essa pessoa passará a ter acesso total ao painel.</>
@@ -1324,7 +1540,7 @@ const handleFileUpload = async (e) => {
                     <button
                       onClick={() => alterarRoleUsuario(
                         usuarioParaAlterarRole.id,
-                        usuarioParaAlterarRole.role === 'ADMIN' ? 'CLIENTE' : 'ADMIN'
+                        usuarioParaAlterarRole.roleDestino
                       )}
                       className="px-4 py-2 text-xs font-semibold uppercase tracking-wider bg-black text-white rounded-lg hover:bg-zinc-800 cursor-pointer"
                     >
@@ -1338,6 +1554,72 @@ const handleFileUpload = async (e) => {
         )}
 
         {/* ABA CONFIGURAÇÕES */}
+        {abaAtiva === 'cupons' && (
+          <div className="max-w-5xl mx-auto space-y-6">
+            <header className="flex flex-col gap-2">
+              <h2 className="text-2xl font-normal tracking-tight">Cupons</h2>
+              <p className="text-xs text-zinc-400 uppercase tracking-wider">Crie descontos reais para o site.</p>
+            </header>
+
+            <form onSubmit={criarCupom} className="bg-white p-6 rounded-xl border border-zinc-200 shadow-2xs grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+              <input value={novoCupom.nome} onChange={(e) => setNovoCupom(prev => ({ ...prev, nome: e.target.value }))} placeholder="Nome do cupom" className="xl:col-span-2 border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black" required />
+              <input value={novoCupom.codigo} onChange={(e) => setNovoCupom(prev => ({ ...prev, codigo: e.target.value.toUpperCase() }))} placeholder="Código" className="border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black" required />
+              <select value={novoCupom.tipo} onChange={(e) => setNovoCupom(prev => ({ ...prev, tipo: e.target.value }))} className="border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-white">
+                <option value="PERCENTUAL">Percentual</option>
+                <option value="FIXO">Numérico</option>
+              </select>
+              <input value={novoCupom.valor} onChange={(e) => setNovoCupom(prev => ({ ...prev, valor: e.target.value }))} placeholder="Valor" type="number" step="0.01" className="border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black" required />
+              <button type="submit" className="bg-black text-white px-4 py-3 rounded-lg text-xs font-semibold uppercase tracking-wider hover:bg-zinc-800 transition-colors">Criar Cupom</button>
+              <input value={novoCupom.expiraEm} onChange={(e) => setNovoCupom(prev => ({ ...prev, expiraEm: e.target.value }))} type="date" className="border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black" />
+              <input value={novoCupom.usosMaximos} onChange={(e) => setNovoCupom(prev => ({ ...prev, usosMaximos: e.target.value }))} placeholder="Limite de usos" type="number" className="border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black" />
+            </form>
+
+            <div className="bg-white border border-zinc-200 rounded-xl overflow-x-auto">
+              {carregandoCupons ? (
+                <p className="px-6 py-10 text-sm text-zinc-400">Carregando cupons...</p>
+              ) : (
+                <table className="w-full text-sm min-w-[900px]">
+                  <thead>
+                    <tr className="border-b border-zinc-100 text-left text-[10px] uppercase tracking-wider text-zinc-400">
+                      <th className="px-6 py-3 font-medium">Nome</th>
+                      <th className="px-6 py-3 font-medium">Código</th>
+                      <th className="px-6 py-3 font-medium">Desconto</th>
+                      <th className="px-6 py-3 font-medium">Criação</th>
+                      <th className="px-6 py-3 font-medium">Expiração</th>
+                      <th className="px-6 py-3 font-medium">Status</th>
+                      <th className="px-6 py-3 font-medium text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cupons.map((cupom) => (
+                      <tr key={cupom.id} className="border-b border-zinc-50 last:border-0">
+                        <td className="px-6 py-4 font-medium text-zinc-800">{cupom.nome}</td>
+                        <td className="px-6 py-4 text-zinc-500 font-mono">{cupom.codigo}</td>
+                        <td className="px-6 py-4 text-zinc-500">{cupom.tipo === 'PERCENTUAL' ? `${cupom.valor}%` : `R$ ${Number(cupom.valor).toFixed(2).replace('.', ',')}`}</td>
+                        <td className="px-6 py-4 text-zinc-500">{new Date(cupom.criadoEm).toLocaleDateString('pt-BR')}</td>
+                        <td className="px-6 py-4 text-zinc-500">{cupom.expiraEm ? new Date(cupom.expiraEm).toLocaleDateString('pt-BR') : 'Sem expiração'}</td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${cupom.ativo ? 'bg-green-50 text-green-700' : 'bg-zinc-100 text-zinc-500'}`}>
+                            {cupom.ativo ? 'Ativo' : 'Pausado'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right space-x-3">
+                          <button onClick={() => alternarStatusCupom(cupom)} className="text-xs font-semibold uppercase tracking-wider text-black hover:underline cursor-pointer">
+                            {cupom.ativo ? 'Pausar' : 'Ativar'}
+                          </button>
+                          <button onClick={() => excluirCupom(cupom.id)} className="text-xs font-semibold uppercase tracking-wider text-red-500 hover:underline cursor-pointer">
+                            Excluir
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
         {abaAtiva === 'configuracoes' && (
           <div className="max-w-2xl mx-auto">
             <header className="mb-8">

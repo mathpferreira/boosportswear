@@ -46,6 +46,11 @@ enum Role {
   CLIENTE
 }
 
+enum TipoCupom {
+  PERCENTUAL
+  FIXO
+}
+
 model Pedido {
   id             String   @id @default(uuid())
   numero         Int      @default(autoincrement())
@@ -67,4 +72,17 @@ model Configuracao {
   instagramUrl String   @default("")
   emailSuporte String   @default("")
   atualizadoEm DateTime @updatedAt
+}
+
+model Cupom {
+  id             String    @id @default(uuid())
+  nome           String
+  codigo         String    @unique
+  tipo           TipoCupom
+  valor          Float
+  ativo          Boolean   @default(true)
+  criadoEm       DateTime  @default(now())
+  expiraEm       DateTime?
+  usosMaximos    Int?
+  usosUtilizados Int       @default(0)
 }
