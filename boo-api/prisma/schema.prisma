@@ -22,15 +22,17 @@ model Produto {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  nome      String
-  email     String   @unique
-  senha     String
-  cpf       String?  @unique
-  telefone  String?
-  role      Role     @default(CLIENTE)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                    String   @id @default(uuid())
+  nome                  String
+  email                 String   @unique
+  senha                 String
+  cpf                   String?  @unique
+  telefone              String?
+  enderecoPadrao        Json?
+  preferenciasConta     Json?
+  role                  Role     @default(CLIENTE)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model Categoria {

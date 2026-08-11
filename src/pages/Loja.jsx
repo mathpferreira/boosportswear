@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   FiUser, FiSearch, FiShoppingBag, FiMenu, FiX,
-  FiInstagram, FiMail
+  FiInstagram, FiMail, FiMapPin, FiCreditCard,
+  FiShield, FiPackage, FiChevronRight
 } from 'react-icons/fi';
 
 import logo from "../assets/logo.png";
@@ -91,6 +92,7 @@ export default function Loja() {
   const [usuarioLogado, setUsuarioLogado] = useState(null);
   const [erroLogin, setErroLogin] = useState(null);
   const [carregandoLogin, setCarregandoLogin] = useState(false);
+  const [avisoConta, setAvisoConta] = useState(null);
 
   // Checkout interno
   const [dadosEntrega, setDadosEntrega] = useState({
@@ -106,9 +108,28 @@ export default function Loja() {
   const [meusPedidos, setMeusPedidos] = useState([]);
   const [carregandoPedidos, setCarregandoPedidos] = useState(false);
   const [pedidoExpandido, setPedidoExpandido] = useState(null);
+  const [erroPedidos, setErroPedidos] = useState(null);
 
   // Minha Conta
-  const [dadosConta, setDadosConta] = useState({ nome: "", email: "", telefone: "" });
+  const [dadosConta, setDadosConta] = useState({
+    nome: "",
+    email: "",
+    telefone: "",
+    enderecoPadrao: {
+      cep: "",
+      rua: "",
+      numero: "",
+      complemento: "",
+      bairro: "",
+      cidade: "",
+      estado: ""
+    },
+    preferenciasConta: {
+      novidadesEmail: true,
+      statusPedidoWhatsApp: true,
+      statusPedidoEmail: true
+    }
+  });
   const [salvandoConta, setSalvandoConta] = useState(false);
   const [mensagemConta, setMensagemConta] = useState(null);
 
@@ -129,6 +150,42 @@ export default function Loja() {
       setUsuarioLogado(JSON.parse(usuarioSalvo));
     }
   }, []);
+
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (hash === 'conta' || hash === 'pedidos' || hash === 'carrinho') {
+      setVisaoAtual(hash);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const hash = window.location.hash.replace('#', '');
+      setVisaoAtual(hash || 'home');
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navegarParaVisao = (proximaVisao, { replace = false } = {}) => {
+    const rotaHash = {
+      home: '',
+      produto: 'produto',
+      carrinho: 'carrinho',
+      conta: 'conta',
+      pedidos: 'pedidos'
+    };
+
+    const proximoHash = rotaHash[proximaVisao] || '';
+    const novaUrl = `${window.location.pathname}${proximoHash ? `#${proximoHash}` : ''}`;
+    if (replace) {
+      window.history.replaceState({ visao: proximaVisao }, '', novaUrl);
+    } else {
+      window.history.pushState({ visao: proximaVisao }, '', novaUrl);
+    }
+    setVisaoAtual(proximaVisao);
+  };
 
   useEffect(() => {
     async function carregarProdutos() {
@@ -183,7 +240,7 @@ export default function Loja() {
     setProdutoSelecionado(produto);
     setTamanhoEscolhido("M");
     setIndiceImagemModal(0);
-    setVisaoAtual('produto');
+    navegarParaVisao('produto');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -204,7 +261,7 @@ export default function Loja() {
       return [...prev, { ...item, quantidade: 1 }];
     });
 
-    setVisaoAtual('carrinho');
+    navegarParaVisao('carrinho');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -225,7 +282,15 @@ export default function Loja() {
       setDadosEntrega(prev => ({
         ...prev,
         nome: prev.nome || usuarioLogado.nome || "",
-        email: prev.email || usuarioLogado.email || ""
+        email: prev.email || usuarioLogado.email || "",
+        telefone: prev.telefone || dadosConta.telefone || "",
+        cep: prev.cep || dadosConta.enderecoPadrao?.cep || "",
+        rua: prev.rua || dadosConta.enderecoPadrao?.rua || "",
+        numero: prev.numero || dadosConta.enderecoPadrao?.numero || "",
+        complemento: prev.complemento || dadosConta.enderecoPadrao?.complemento || "",
+        bairro: prev.bairro || dadosConta.enderecoPadrao?.bairro || "",
+        cidade: prev.cidade || dadosConta.enderecoPadrao?.cidade || "",
+        estado: prev.estado || dadosConta.enderecoPadrao?.estado || ""
       }));
     }
     setEtapaSacola("checkout");
@@ -237,6 +302,7 @@ export default function Loja() {
 
   const carregarMeusPedidos = async () => {
     setCarregandoPedidos(true);
+    setErroPedidos(null);
     try {
       const token = localStorage.getItem('token');
       const resposta = await fetch(`${API_URL}/meus-pedidos`, {
@@ -245,9 +311,12 @@ export default function Loja() {
       if (resposta.ok) {
         const dados = await resposta.json();
         setMeusPedidos(dados);
+      } else {
+        setErroPedidos("Não foi possível carregar seus pedidos agora.");
       }
     } catch (erro) {
       console.error("Erro ao carregar pedidos:", erro);
+      setErroPedidos("Erro de conexão ao buscar seus pedidos.");
     } finally {
       setCarregandoPedidos(false);
     }
@@ -264,7 +333,21 @@ export default function Loja() {
         setDadosConta({
           nome: dados.nome || "",
           email: dados.email || "",
-          telefone: dados.telefone || ""
+          telefone: dados.telefone || "",
+          enderecoPadrao: {
+            cep: dados.enderecoPadrao?.cep || "",
+            rua: dados.enderecoPadrao?.rua || "",
+            numero: dados.enderecoPadrao?.numero || "",
+            complemento: dados.enderecoPadrao?.complemento || "",
+            bairro: dados.enderecoPadrao?.bairro || "",
+            cidade: dados.enderecoPadrao?.cidade || "",
+            estado: dados.enderecoPadrao?.estado || ""
+          },
+          preferenciasConta: {
+            novidadesEmail: dados.preferenciasConta?.novidadesEmail ?? true,
+            statusPedidoWhatsApp: dados.preferenciasConta?.statusPedidoWhatsApp ?? true,
+            statusPedidoEmail: dados.preferenciasConta?.statusPedidoEmail ?? true
+          }
         });
       }
     } catch (erro) {
@@ -340,14 +423,31 @@ export default function Loja() {
   const reiniciarSacola = () => {
     setEtapaSacola("carrinho");
     setNumeroPedido(null);
-    setVisaoAtual('home');
+    navegarParaVisao('home');
   };
 
   const logout = () => {
     setUsuarioLogado(null);
     setIsUserMenuAberto(false);
+    setAvisoConta(null);
+    setMeusPedidos([]);
+    setPedidoExpandido(null);
     localStorage.removeItem('token');
     localStorage.removeItem('usuario');
+  };
+
+  const abrirMinhaConta = async () => {
+    setMensagemConta(null);
+    navegarParaVisao('conta');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    await Promise.allSettled([carregarMinhaConta(), carregarMeusPedidos()]);
+  };
+
+  const abrirMeusPedidos = async () => {
+    setPedidoExpandido(null);
+    navegarParaVisao('pedidos');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    await carregarMeusPedidos();
   };
 
   // ==========================================
@@ -392,11 +492,23 @@ export default function Loja() {
         localStorage.setItem('usuario', JSON.stringify(dados.usuario));
       }
 
-      setUsuarioLogado(dados.usuario || { email: emailLogin, nome: nomeRegistro });
+      const usuarioAutenticado = dados.usuario || { email: emailLogin, nome: nomeRegistro };
+      setUsuarioLogado(usuarioAutenticado);
       setIsLoginAberto(false);
       setEmailLogin("");
       setSenhaLogin("");
       setNomeRegistro("");
+      setAvisoConta({
+        tipo: usuarioAutenticado.role === 'ADMIN' ? 'admin' : 'sucesso',
+        texto: usuarioAutenticado.role === 'ADMIN'
+          ? 'Login realizado. Seu acesso de administrador está liberado.'
+          : `Bem-vinda${usuarioAutenticado.nome ? `, ${usuarioAutenticado.nome.split(' ')[0]}` : ''}. Sua área da conta foi preparada para você.`
+      });
+      setPedidoExpandido(null);
+      navegarParaVisao('conta');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      carregarMinhaConta();
+      carregarMeusPedidos();
     } catch (erro) {
       setErroLogin(erro.message);
     } finally {
@@ -407,6 +519,20 @@ export default function Loja() {
   const imagensModal = produtoSelecionado?.imagens?.length > 0 
     ? produtoSelecionado.imagens 
     : (produtoSelecionado ? [{ url: produtoSelecionado.imgUrl }] : []);
+
+  const isAdmin = usuarioLogado?.role === 'ADMIN';
+  const totalPedidosCliente = meusPedidos.length;
+  const contaCompleta = Boolean(
+    dadosConta.nome &&
+    dadosConta.email &&
+    dadosConta.telefone &&
+    dadosConta.enderecoPadrao?.cep &&
+    dadosConta.enderecoPadrao?.rua &&
+    dadosConta.enderecoPadrao?.numero &&
+    dadosConta.enderecoPadrao?.bairro &&
+    dadosConta.enderecoPadrao?.cidade &&
+    dadosConta.enderecoPadrao?.estado
+  );
 
   const inputClasses = "w-full border border-zinc-200 rounded px-3 py-2 text-xs focus:outline-none focus:border-black transition-colors";
   const labelClasses = "text-[10px] font-bold tracking-widest uppercase text-zinc-400 block mb-1.5";
@@ -488,34 +614,50 @@ export default function Loja() {
                 {isUserMenuAberto && usuarioLogado && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuAberto(false)}></div>
-                    <div className="absolute right-0 mt-4 w-56 bg-white border border-zinc-100 rounded-lg shadow-xl py-2 z-50 animate-fadeIn">
+                    <div className="absolute right-0 mt-4 w-72 bg-white border border-zinc-100 rounded-lg shadow-xl py-2 z-50 animate-fadeIn">
                       <div className="px-4 py-3 border-b border-zinc-50 mb-2">
                         <p className="text-xs font-bold text-zinc-900 truncate">{usuarioLogado.nome || 'Cliente'}</p>
                         <p className="text-[10px] text-zinc-500 truncate mt-0.5">{usuarioLogado.email}</p>
                       </div>
+                      <div className="px-4 pb-2">
+                        <div className="rounded-lg bg-zinc-50 border border-zinc-100 px-3 py-3">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Resumo</p>
+                          <p className="text-xs text-zinc-700 mt-2">
+                            {totalPedidosCliente > 0
+                              ? `${totalPedidosCliente} pedido${totalPedidosCliente > 1 ? 's' : ''} encontrado${totalPedidosCliente > 1 ? 's' : ''}`
+                              : 'Nenhum pedido ainda'}
+                          </p>
+                        </div>
+                      </div>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           setIsUserMenuAberto(false);
-                          setMensagemConta(null);
-                          carregarMinhaConta();
-                          setVisaoAtual('conta');
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                          await abrirMinhaConta();
                         }}
                         className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors"
                       >
                         Minha Conta
                       </button>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           setIsUserMenuAberto(false);
-                          carregarMeusPedidos();
-                          setVisaoAtual('pedidos');
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                          await abrirMeusPedidos();
                         }}
                         className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors"
                       >
                         Meus Pedidos
                       </button>
+                      {isAdmin && (
+                        <button
+                          onClick={() => {
+                            setIsUserMenuAberto(false);
+                            window.location.href = '/admin';
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors"
+                        >
+                          Ir para o Gerenciador
+                        </button>
+                      )}
                       <button 
                         onClick={logout} 
                         className="w-full text-left px-4 py-2.5 text-xs font-bold text-red-500 hover:bg-red-50 uppercase tracking-wider mt-1 border-t border-zinc-50 transition-colors"
@@ -727,13 +869,66 @@ export default function Loja() {
           )}
 
           {visaoAtual === 'conta' && (
-            <div className="max-w-xl mx-auto px-6 py-12 animate-slideUpFade">
+            <div className="max-w-6xl mx-auto px-6 py-12 animate-slideUpFade">
               <div className="flex justify-between items-center mb-8 border-b border-zinc-100 pb-4">
                 <h2 className="text-2xl font-black uppercase tracking-wider">Minha Conta</h2>
                 <button onClick={() => setVisaoAtual('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors">Voltar</button>
               </div>
 
-              <form onSubmit={salvarMinhaConta} className="border border-zinc-100 p-6 rounded-lg shadow-sm space-y-4">
+              {avisoConta && (
+                <div className={`mb-6 rounded-2xl border px-5 py-4 flex items-start justify-between gap-4 ${avisoConta.tipo === 'admin' ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-green-50 border-green-200 text-green-900'}`}>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
+                      {avisoConta.tipo === 'admin' ? 'Acesso administrativo' : 'Conta conectada'}
+                    </p>
+                    <p className="text-sm font-medium">{avisoConta.texto}</p>
+                  </div>
+                  <button onClick={() => setAvisoConta(null)} className="text-xs font-bold uppercase opacity-70 hover:opacity-100 transition-opacity">
+                    Fechar
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button
+                      onClick={() => abrirMeusPedidos()}
+                      className="text-left rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm hover:border-black transition-colors"
+                    >
+                      <FiPackage className="text-lg mb-4" />
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Pedidos</p>
+                      <p className="text-2xl font-black mt-2">{totalPedidosCliente}</p>
+                      <p className="text-xs text-zinc-500 mt-2">Veja andamento, itens e status.</p>
+                    </button>
+
+                    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+                      <FiMapPin className="text-lg mb-4" />
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Endereço padrão</p>
+                      <p className="text-sm font-semibold mt-2 text-zinc-900">{dadosConta.enderecoPadrao?.rua ? `${dadosConta.enderecoPadrao.rua}, ${dadosConta.enderecoPadrao.numero}` : 'Cadastre seu endereço'}</p>
+                      <p className="text-xs text-zinc-500 mt-2">
+                        {dadosConta.enderecoPadrao?.bairro ? `${dadosConta.enderecoPadrao.bairro} • ${dadosConta.enderecoPadrao.cidade}/${dadosConta.enderecoPadrao.estado}` : 'Salve antes do primeiro pedido para agilizar o checkout.'}
+                      </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+                      <FiCreditCard className="text-lg mb-4" />
+                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Pagamentos</p>
+                      <p className="text-sm font-semibold mt-2 text-zinc-900">Em breve</p>
+                      <p className="text-xs text-zinc-500 mt-2">Salvamento de cartões, Pix favorito e histórico de pagamentos.</p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={salvarMinhaConta} className="border border-zinc-100 p-6 rounded-2xl shadow-sm space-y-4 bg-white">
+                    <div className="flex items-center justify-between gap-4 border-b border-zinc-100 pb-4">
+                      <div>
+                        <p className="text-sm font-black uppercase tracking-wider">Seus Dados</p>
+                        <p className="text-xs text-zinc-500 mt-1">Atualize suas informações principais de cadastro.</p>
+                      </div>
+                      <span className={`text-[10px] font-bold uppercase px-3 py-1.5 rounded-full ${contaCompleta ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                        {contaCompleta ? 'Perfil completo' : 'Perfil incompleto'}
+                      </span>
+                    </div>
                 <div>
                   <label className={labelClasses}>Nome Completo</label>
                   <input
@@ -763,6 +958,115 @@ export default function Loja() {
                   />
                 </div>
 
+                <div className="border-t border-zinc-100 pt-4">
+                  <p className="text-sm font-black uppercase tracking-wider mb-4">Endereço</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelClasses}>CEP</label>
+                      <input
+                        value={dadosConta.enderecoPadrao.cep}
+                        onChange={(e) => setDadosConta(prev => ({ ...prev, enderecoPadrao: { ...prev.enderecoPadrao, cep: e.target.value } }))}
+                        className={inputClasses}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClasses}>Estado</label>
+                      <input
+                        value={dadosConta.enderecoPadrao.estado}
+                        onChange={(e) => setDadosConta(prev => ({ ...prev, enderecoPadrao: { ...prev.enderecoPadrao, estado: e.target.value } }))}
+                        className={inputClasses}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                    <div className="md:col-span-2">
+                      <label className={labelClasses}>Rua</label>
+                      <input
+                        value={dadosConta.enderecoPadrao.rua}
+                        onChange={(e) => setDadosConta(prev => ({ ...prev, enderecoPadrao: { ...prev.enderecoPadrao, rua: e.target.value } }))}
+                        className={inputClasses}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClasses}>Número</label>
+                      <input
+                        value={dadosConta.enderecoPadrao.numero}
+                        onChange={(e) => setDadosConta(prev => ({ ...prev, enderecoPadrao: { ...prev.enderecoPadrao, numero: e.target.value } }))}
+                        className={inputClasses}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                    <div>
+                      <label className={labelClasses}>Complemento</label>
+                      <input
+                        value={dadosConta.enderecoPadrao.complemento}
+                        onChange={(e) => setDadosConta(prev => ({ ...prev, enderecoPadrao: { ...prev.enderecoPadrao, complemento: e.target.value } }))}
+                        className={inputClasses}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClasses}>Bairro</label>
+                      <input
+                        value={dadosConta.enderecoPadrao.bairro}
+                        onChange={(e) => setDadosConta(prev => ({ ...prev, enderecoPadrao: { ...prev.enderecoPadrao, bairro: e.target.value } }))}
+                        className={inputClasses}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClasses}>Cidade</label>
+                      <input
+                        value={dadosConta.enderecoPadrao.cidade}
+                        onChange={(e) => setDadosConta(prev => ({ ...prev, enderecoPadrao: { ...prev.enderecoPadrao, cidade: e.target.value } }))}
+                        className={inputClasses}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-zinc-100 pt-4">
+                  <p className="text-sm font-black uppercase tracking-wider mb-4">Notificações</p>
+                  <div className="space-y-3">
+                    <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 px-4 py-3 cursor-pointer">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider">Novidades por e-mail</p>
+                        <p className="text-[11px] text-zinc-500 mt-1">Lançamentos, coleções e avisos especiais.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={dadosConta.preferenciasConta.novidadesEmail}
+                        onChange={(e) => setDadosConta(prev => ({ ...prev, preferenciasConta: { ...prev.preferenciasConta, novidadesEmail: e.target.checked } }))}
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 px-4 py-3 cursor-pointer">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider">Status do pedido por e-mail</p>
+                        <p className="text-[11px] text-zinc-500 mt-1">Confirmação, envio e entrega.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={dadosConta.preferenciasConta.statusPedidoEmail}
+                        onChange={(e) => setDadosConta(prev => ({ ...prev, preferenciasConta: { ...prev.preferenciasConta, statusPedidoEmail: e.target.checked } }))}
+                      />
+                    </label>
+
+                    <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 px-4 py-3 cursor-pointer">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider">Status do pedido por WhatsApp</p>
+                        <p className="text-[11px] text-zinc-500 mt-1">Estrutura salva agora para ativarmos no backend.</p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={dadosConta.preferenciasConta.statusPedidoWhatsApp}
+                        onChange={(e) => setDadosConta(prev => ({ ...prev, preferenciasConta: { ...prev.preferenciasConta, statusPedidoWhatsApp: e.target.checked } }))}
+                      />
+                    </label>
+                  </div>
+                </div>
+
                 {mensagemConta && (
                   <p className={`text-[10px] font-bold uppercase p-3 rounded ${mensagemConta.tipo === "sucesso" ? "text-green-700 bg-green-50" : "text-red-500 bg-red-50"}`}>
                     {mensagemConta.texto}
@@ -776,7 +1080,67 @@ export default function Loja() {
                 >
                   {salvandoConta ? "Salvando..." : "Salvar Alterações"}
                 </button>
-              </form>
+                  </form>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <span className="w-12 h-12 rounded-full bg-black text-white text-sm font-bold flex items-center justify-center">
+                        {(usuarioLogado?.nome || usuarioLogado?.email || "?").charAt(0).toUpperCase()}
+                      </span>
+                      <div>
+                        <p className="text-sm font-bold text-zinc-900">{usuarioLogado?.nome || 'Cliente Boo'}</p>
+                        <p className="text-xs text-zinc-500">{usuarioLogado?.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 space-y-3">
+                      <button
+                        onClick={() => abrirMeusPedidos()}
+                        className="w-full flex items-center justify-between rounded-xl bg-white border border-zinc-200 px-4 py-3 text-left hover:border-black transition-colors"
+                      >
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wider text-zinc-900">Acompanhar pedidos</p>
+                          <p className="text-[11px] text-zinc-500 mt-1">Detalhes, status e entrega.</p>
+                        </div>
+                        <FiChevronRight className="text-zinc-400" />
+                      </button>
+
+                      {isAdmin && (
+                        <button
+                          onClick={() => { window.location.href = '/admin'; }}
+                          className="w-full flex items-center justify-between rounded-xl bg-black text-white px-4 py-3 text-left hover:bg-zinc-800 transition-colors"
+                        >
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wider">Gerenciador</p>
+                            <p className="text-[11px] text-zinc-300 mt-1">Abrir painel administrativo.</p>
+                          </div>
+                          <FiShield />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+                    <p className="text-sm font-black uppercase tracking-wider">Status da Conta</p>
+                    <div className="mt-4 space-y-3 text-xs text-zinc-600">
+                      <div className="flex items-center justify-between">
+                        <span className="uppercase font-bold text-zinc-500">Cadastro</span>
+                        <span className="font-bold">{contaCompleta ? 'Completo' : 'Pendente'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="uppercase font-bold text-zinc-500">Pedidos</span>
+                        <span className="font-bold">{totalPedidosCliente}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="uppercase font-bold text-zinc-500">WhatsApp</span>
+                        <span className="font-bold">{dadosConta.preferenciasConta.statusPedidoWhatsApp ? 'Ativar backend' : 'Desligado'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -789,6 +1153,13 @@ export default function Loja() {
 
               {carregandoPedidos ? (
                 <div className="text-center py-20 text-zinc-400 text-xs tracking-widest uppercase">Carregando pedidos...</div>
+              ) : erroPedidos ? (
+                <div className="text-center py-20 animate-fadeIn">
+                  <p className="text-xs font-bold uppercase tracking-widest text-red-500 mb-5">{erroPedidos}</p>
+                  <button onClick={() => abrirMeusPedidos()} className="border border-black text-black px-6 py-3 text-xs font-bold uppercase tracking-widest hover:bg-zinc-50 transition-colors">
+                    Tentar Novamente
+                  </button>
+                </div>
               ) : meusPedidos.length === 0 ? (
                 <div className="text-center py-32 text-zinc-400 animate-fadeIn">
                   <p className="text-sm uppercase tracking-widest mb-6">Você ainda não fez nenhum pedido.</p>

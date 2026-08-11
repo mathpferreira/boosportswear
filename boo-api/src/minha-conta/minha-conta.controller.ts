@@ -15,7 +15,26 @@ export class MinhaContaController {
   @Patch()
   atualizar(
     @Req() req: any,
-    @Body() body: { nome?: string; email?: string; telefone?: string },
+    @Body()
+    body: {
+      nome?: string;
+      email?: string;
+      telefone?: string;
+      enderecoPadrao?: {
+        cep?: string;
+        rua?: string;
+        numero?: string;
+        complemento?: string;
+        bairro?: string;
+        cidade?: string;
+        estado?: string;
+      };
+      preferenciasConta?: {
+        novidadesEmail?: boolean;
+        statusPedidoWhatsApp?: boolean;
+        statusPedidoEmail?: boolean;
+      };
+    },
   ) {
     return this.minhaContaService.atualizar(req.user.id, body);
   }
