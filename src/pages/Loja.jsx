@@ -460,11 +460,6 @@ export default function Loja() {
     setCarrinho(prev => prev.filter(item => item.cartId !== cartId));
   };
 
-  const calcularFrete = () => {
-    if (!cep || cep.length < 8) return;
-    setFreteResultado({ valor: 19.90, prazo: "3 a 5 dias úteis" });
-  };
-
   const buscarEnderecoPorCep = async (cepInformado) => {
     const cepLimpo = (cepInformado || "").replace(/\D/g, "");
     if (cepLimpo.length !== 8) return null;
@@ -1283,7 +1278,21 @@ export default function Loja() {
                         <div className="mt-3 text-xs animate-fadeIn">
                           {freteResultado.carregando && <p className="text-zinc-500">Consultando transportadoras...</p>}
                           {freteResultado.erro && <p className="text-red-600">{freteResultado.erro}</p>}
-                          {freteResultado.valor !== undefined && <p className="font-bold text-green-700">{freteResultado.nome}: R$ {freteResultado.valor.toFixed(2).replace('.', ',')} · {freteResultado.prazo}</p>}
+                          {freteResultado.valor !== undefined && (
+                            <div className="space-y-2">
+                              {(freteResultado.opcoes || [freteResultado]).map((opcao) => (
+                                <button
+                                  key={`${opcao.codigo || opcao.nome}-${opcao.valor}`}
+                                  type="button"
+                                  onClick={() => setFreteResultado({ ...opcao, opcoes: freteResultado.opcoes })}
+                                  className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-3 text-left border ${opcao.codigo === freteResultado.codigo ? 'border-black bg-zinc-50' : 'border-zinc-200'}`}
+                                >
+                                  <span><strong className="block text-zinc-900">{opcao.nome}</strong><small className="text-zinc-500">{opcao.prazo}</small></span>
+                                  <strong className="text-green-700">R$ {opcao.valor.toFixed(2).replace('.', ',')}</strong>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1407,7 +1416,14 @@ export default function Loja() {
                         {erroCupom && <p className="text-[10px] font-bold uppercase text-red-500">{erroCupom}</p>}
                       </div>
                       {cupomAplicado && <div className="flex justify-between text-sm text-green-700"><span>Desconto</span><span>- R$ {descontoCupom.toFixed(2).replace('.', ',')}</span></div>}
-                      {freteResultado && <div className="flex justify-between text-sm text-zinc-600"><span>Frete</span><span>R$ {freteResultado.valor.toFixed(2).replace('.', ',')}</span></div>}
+                      <div className="flex justify-between text-sm text-zinc-600">
+                        <span>Frete</span>
+                        <span>
+                          {freteResultado?.valor !== undefined
+                            ? `R$ ${freteResultado.valor.toFixed(2).replace('.', ',')}`
+                            : 'Calcule no produto'}
+                        </span>
+                      </div>
                       <div className="flex justify-between text-lg font-black pt-3 border-t border-zinc-200"><span>Total</span><span>R$ {totalComFrete.toFixed(2).replace('.', ',')}</span></div>
                     </div>
                     {erroPedido && <p className="text-[10px] text-red-500 font-bold uppercase mb-4 text-center">{erroPedido}</p>}
