@@ -123,6 +123,9 @@ const registrarLogAcao = (nome, acao) => {
   ].slice(0, 50));
 };
 
+const normalizarTamanho = (label = "") =>
+  String(label).toLowerCase().includes("nico") ? "U" : String(label);
+
   const normalizarInstagram = (valor) => {
     const texto = valor.trim();
     if (!texto) return "";
@@ -141,7 +144,7 @@ const registrarLogAcao = (nome, acao) => {
           imagens: p.imagens ? p.imagens.map(img => typeof img === 'string' ? { url: img, cor: p.cores ? p.cores[0] : "#000000" } : img) : [{ url: p.imgUrl, cor: "#000000" }],
           cores: p.cores || ["#000000"],
           tamanhos: Array.isArray(p.tamanhos) && p.tamanhos.length > 0
-            ? p.tamanhos
+            ? p.tamanhos.map((tam) => ({ ...tam, label: normalizarTamanho(tam.label) }))
             : TAMANHOS_PADRAO.map((label) => ({ label, estoque: label === "M" ? 1 : 0 })),
           preco: p.preco?.toString().replace('.', ',') || "0,00"
         }));
@@ -355,7 +358,7 @@ const registrarLogAcao = (nome, acao) => {
       categoria: categorias[0]?.nome || "Conjuntos",
       cores: ["#000000"],
       imagens: [],
-      tamanhos: TAMANHOS_PADRAO.map((label) => ({ label, estoque: label === "M" ? 1 : 0 }))
+      tamanhos: TAMANHOS_PADRAO.map((label) => ({ label: normalizarTamanho(label), estoque: label === "M" ? 1 : 0 }))
     };
     setProdutos([produtoVazio, ...produtos]);
     setProdutoEditando(produtoVazio);
@@ -493,6 +496,7 @@ const handleFileUpload = async (e) => {
 
       if (res.ok) {
         await carregarProdutos();
+        registrarLogAcao('Administração Boo', `${produtoEditando.isNew ? 'Criou' : 'Atualizou'} o produto ${produtoEditando.nome}`);
         setProdutoEditando(null);
         dispararToast("Alterações salvas com sucesso!");
       } else {
@@ -994,6 +998,10 @@ const handleFileUpload = async (e) => {
                 <button onClick={() => { setAbaAtiva('configuracoes'); setProdutoEditando(null); setIsMenuAberto(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-xs tracking-wider uppercase transition-colors ${abaAtiva === 'configuracoes' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}>
                   <FiSettings className="text-base" />
                   Configurações
+                </button>
+                <button onClick={() => { setAbaAtiva('logs'); setProdutoEditando(null); setIsMenuAberto(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-xs tracking-wider uppercase transition-colors ${abaAtiva === 'logs' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}>
+                  <FiClock className="text-base" />
+                  Logs
                 </button>
               </nav>
             </div>
@@ -1937,6 +1945,42 @@ const handleFileUpload = async (e) => {
                             Excluir
                           </button>
                         </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {abaAtiva === 'logs' && (
+          <div className="max-w-4xl mx-auto">
+            <header className="mb-8">
+              <h2 className="text-2xl font-normal tracking-tight">Logs de Ações</h2>
+              <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider">Registro local das ações recentes do painel.</p>
+            </header>
+
+            <div className="bg-white border border-zinc-200 rounded-xl overflow-x-auto">
+              {logsAcoes.length === 0 ? (
+                <p className="px-6 py-12 text-center text-zinc-400 text-xs uppercase tracking-wider">
+                  Nenhuma ação registrada ainda.
+                </p>
+              ) : (
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-100 text-left text-[10px] uppercase tracking-wider text-zinc-400">
+                      <th className="px-6 py-3 font-medium">Nome</th>
+                      <th className="px-6 py-3 font-medium">Função / Ação</th>
+                      <th className="px-6 py-3 font-medium">Data e Hora</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {logsAcoes.map((log) => (
+                      <tr key={log.id} className="border-b border-zinc-50 last:border-0">
+                        <td className="px-6 py-4 font-medium text-zinc-800">{log.nome}</td>
+                        <td className="px-6 py-4 text-zinc-500">{log.acao}</td>
+                        <td className="px-6 py-4 text-zinc-500">{new Date(log.dataHora).toLocaleString('pt-BR')}</td>
                       </tr>
                     ))}
                   </tbody>

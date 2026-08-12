@@ -166,6 +166,9 @@ export default function Loja() {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
+  const normalizarTamanho = (label = "") =>
+    String(label).toLowerCase().includes("nico") ? "U" : String(label);
+
   const extrairIdDaRotaProduto = (valor = "") => {
     if (!valor) return "";
     const partes = valor.split("--");
@@ -200,9 +203,9 @@ export default function Loja() {
   useEffect(() => {
     const tituloOriginal = 'BOO SPORTWEAR';
     const mensagens = [
-      'Seu look Boo te espera',
-      'As novidades chegaram',
-      'Volte para finalizar sua compra',
+      'Seu look novo te espera!',
+      'As novidades chegaram 🛍️',
+      'Volte para finalizar sua compra!',
     ];
 
     let indiceMensagem = 0;
@@ -393,7 +396,7 @@ export default function Loja() {
   const abrirProduto = (produto) => {
     setProdutoSelecionado(produto);
     const tamanhosDisponiveis = Array.isArray(produto.tamanhos) && produto.tamanhos.length > 0
-      ? produto.tamanhos
+      ? produto.tamanhos.map((tam) => ({ ...tam, label: normalizarTamanho(tam.label) }))
       : TAMANHOS_PADRAO.map((label) => ({ label, estoque: label === "M" ? 1 : 0 }));
     const primeiroDisponivel = tamanhosDisponiveis.find((item) => Number(item.estoque || 0) > 0);
     setTamanhoEscolhido(primeiroDisponivel?.label || "M");
@@ -776,9 +779,9 @@ export default function Loja() {
   const tamanhosProdutoSelecionado = useMemo(() => {
     if (!produtoSelecionado) return [];
     if (Array.isArray(produtoSelecionado.tamanhos) && produtoSelecionado.tamanhos.length > 0) {
-      return produtoSelecionado.tamanhos;
+      return produtoSelecionado.tamanhos.map((tam) => ({ ...tam, label: normalizarTamanho(tam.label) }));
     }
-    return TAMANHOS_PADRAO.map((label) => ({ label, estoque: label === "M" ? 1 : 0 }));
+    return TAMANHOS_PADRAO.map((label) => ({ label: normalizarTamanho(label), estoque: label === "M" ? 1 : 0 }));
   }, [produtoSelecionado]);
   const tamanhoSelecionadoInfo = tamanhosProdutoSelecionado.find((item) => item.label === tamanhoEscolhido);
 
