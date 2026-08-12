@@ -10,7 +10,9 @@ import { PrismaService } from '../../prisma/prisma.service';
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'boo_secret_key_123',
+      secret: process.env.JWT_SECRET || (process.env.NODE_ENV === 'production'
+        ? (() => { throw new Error('JWT_SECRET e obrigatorio em producao'); })()
+        : 'boo-development-only-secret'),
       signOptions: { expiresIn: '7d' },
     }),
   ],

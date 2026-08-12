@@ -7,6 +7,7 @@ import {
 } from 'react-icons/fi';
 
 import AuthCard from "../components/AuthCard";
+import { API_URL } from "../config/api";
 import logo from "../assets/logo.png";
 
 // COMPONENTE: Card do Produto
@@ -48,6 +49,9 @@ function CardProduto({ produto, onAbrir }) {
       <div className="space-y-1.5">
         {produto.categoria && (
           <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">{produto.categoria}</p>
+        )}
+        {Number(produto.estoque || 0) > 0 && Number(produto.estoque || 0) <= 3 && (
+          <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest">Últimas peças</p>
         )}
         <h4 onClick={() => onAbrir(produto)} className="text-xs font-semibold uppercase tracking-wider text-zinc-800 hover:text-black">
           {produto.nome}
@@ -93,6 +97,7 @@ export default function Loja() {
   const [nomeRegistro, setNomeRegistro] = useState(""); 
   const [emailLogin, setEmailLogin] = useState("");
   const [senhaLogin, setSenhaLogin] = useState("");
+  const [aceitouTermosLogin, setAceitouTermosLogin] = useState(false);
   const [usuarioLogado, setUsuarioLogado] = useState(null);
   const [erroLogin, setErroLogin] = useState(null);
   const [carregandoLogin, setCarregandoLogin] = useState(false);
@@ -111,6 +116,7 @@ export default function Loja() {
   const [cupomAplicado, setCupomAplicado] = useState(null);
   const [erroCupom, setErroCupom] = useState(null);
   const [aplicandoCupom, setAplicandoCupom] = useState(false);
+  const [miniCarrinhoAberto, setMiniCarrinhoAberto] = useState(false);
 
   // Meus Pedidos
   const [meusPedidos, setMeusPedidos] = useState([]);
@@ -155,8 +161,7 @@ export default function Loja() {
     }
   });
 
-  const API_URL = "http://167.148.161.90/api";
-  const TAMANHOS_PADRAO = ["P", "M", "G", "Tamanho Único"];
+  const TAMANHOS_PADRAO = ["P", "M", "G", "U"];
 
   const slugificarProduto = (texto = "") =>
     texto
@@ -201,7 +206,7 @@ export default function Loja() {
   }, []);
 
   useEffect(() => {
-    const tituloOriginal = 'BOO SPORTWEAR';
+    const tituloOriginal = 'BOO Sportwear';
     const mensagens = [
       'Seu look novo te espera!',
       'As novidades chegaram 🛍️',
@@ -357,6 +362,12 @@ export default function Loja() {
     return [...new Set(produtosBrazilian.map(p => p.categoria).filter(Boolean))];
   }, [produtosBrazilian]);
 
+  const produtosNovidades = useMemo(() => [...produtosBrazilian].slice(0, 4), [produtosBrazilian]);
+  const produtosUltimasPecas = useMemo(
+    () => produtosBrazilian.filter((produto) => Number(produto.estoque || 0) > 0 && Number(produto.estoque || 0) <= 3).slice(0, 4),
+    [produtosBrazilian]
+  );
+
   const sugestoesBusca = useMemo(() => {
     const termoNormalizado = termoBusca.trim().toLowerCase();
     if (!termoNormalizado) return [];
@@ -421,9 +432,7 @@ export default function Loja() {
       }
       return [...prev, { ...item, quantidade: 1 }];
     });
-
-    navegarParaVisao('carrinho');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setMiniCarrinhoAberto(true);
   };
 
   const removerDoCarrinho = (cartId) => {
@@ -716,6 +725,11 @@ export default function Loja() {
     // BLINDAGEM E VALIDAÇÕES DO FORMULÁRIO
     if (isRegistro) {
       const palavrasNome = nomeRegistro.trim().split(/\s+/);
+      if (!aceitouTermosLogin) {
+        setErroLogin('Voce precisa aceitar os Termos e Condicoes e a Politica de Privacidade.');
+        setCarregandoLogin(false);
+        return;
+      }
       if (palavrasNome.length < 2) {
         setErroLogin('Por favor, insira seu nome e sobrenome completos.');
         setCarregandoLogin(false);
@@ -1129,6 +1143,34 @@ export default function Loja() {
               </section>
 
               <main id="catalogo" className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
+                {produtosNovidades.length > 0 && (
+                  <section className="mb-14">
+                    <div className="mb-6">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-zinc-400">Curadoria Boo</p>
+                      <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tight mt-2">Novidades</h3>
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-8">
+                      {produtosNovidades.map((produto) => (
+                        <CardProduto key={`novo-${produto.id}`} produto={produto} onAbrir={abrirProduto} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {produtosUltimasPecas.length > 0 && (
+                  <section className="mb-14 rounded-[2rem] border border-zinc-200 bg-zinc-50 px-5 py-8 sm:px-8">
+                    <div className="mb-6">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-red-500">Seleção Limitada</p>
+                      <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tight mt-2">Últimas Peças</h3>
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-8">
+                      {produtosUltimasPecas.map((produto) => (
+                        <CardProduto key={`ultimas-${produto.id}`} produto={produto} onAbrir={abrirProduto} />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
                 <div className="flex flex-col gap-6 mb-12 border-b border-zinc-100 pb-6">
                   <h3 className="text-sm font-bold tracking-[0.2em] uppercase">Catálogo</h3>
                   <div className="flex flex-wrap gap-2">
@@ -1156,9 +1198,9 @@ export default function Loja() {
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 animate-slideUpFade">
               <button onClick={() => setVisaoAtual('home')} className="mb-8 text-xs font-bold uppercase tracking-wider text-zinc-500 hover:text-black flex items-center gap-2 transition-colors">← Voltar</button>
 
-              <div className="flex flex-col md:flex-row gap-8 md:gap-12">
-                <div className="md:w-1/2 flex flex-col gap-4">
-                  <div className="aspect-[3/4] bg-zinc-100 rounded-lg overflow-hidden border">
+              <div className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.75fr)] gap-8 lg:gap-16 items-start">
+                <div className="w-full max-w-xl mx-auto flex flex-col gap-4">
+                  <div className="aspect-[4/5] max-h-[680px] bg-zinc-100 rounded-2xl overflow-hidden border border-zinc-100">
                     <img src={imagensModal[indiceImagemModal]?.url} alt={produtoSelecionado.nome} className="w-full h-full object-cover animate-fadeIn" />
                   </div>
                   {imagensModal.length > 1 && (
@@ -1172,7 +1214,7 @@ export default function Loja() {
                   )}
                 </div>
 
-                <div className="md:w-1/2 flex flex-col justify-center">
+                <div className="md:sticky md:top-28 flex flex-col justify-center bg-white md:border md:border-zinc-100 md:rounded-2xl md:p-7 lg:p-9">
                   <div className="space-y-6">
                     <div>
                       <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mb-1">{produtoSelecionado.categoria}</p>
@@ -1197,7 +1239,7 @@ export default function Loja() {
                                   : "border-zinc-200 text-zinc-700 hover:border-zinc-400"
                               } ${indisponivel ? "opacity-50 cursor-not-allowed bg-zinc-50 text-zinc-400" : ""}`}
                             >
-                              <span>{tam.label === "Tamanho Único" ? "TU" : tam.label}</span>
+                              <span>{normalizarTamanho(tam.label)}</span>
                               {indisponivel && <span className="absolute left-[-20%] top-1/2 h-[2px] w-[140%] rotate-[-35deg] bg-red-500"></span>}
                             </button>
                           );
@@ -1220,6 +1262,10 @@ export default function Loja() {
                   <button onClick={() => adicionarAoCarrinho(produtoSelecionado, tamanhoEscolhido)} disabled={!configLoja.lojaAberta || Number(tamanhoSelecionadoInfo?.estoque || 0) <= 0} className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors mt-8 cursor-pointer disabled:bg-zinc-300 disabled:cursor-not-allowed">
                     {configLoja.lojaAberta ? "Adicionar à Sacola" : "Loja Fechada no Momento"}
                   </button>
+                  <div className="grid grid-cols-2 gap-3 mt-4 text-[10px] uppercase tracking-wider font-bold text-zinc-600">
+                    <div className="border border-zinc-100 rounded-xl p-4"><FiShield className="mb-2 text-base text-black" />Compra protegida</div>
+                    <div className="border border-zinc-100 rounded-xl p-4"><FiPackage className="mb-2 text-base text-black" />Envio acompanhado</div>
+                  </div>
                 </div>
               </div>
 
@@ -1707,6 +1753,36 @@ export default function Loja() {
         </div>
       </div>
 
+      {miniCarrinhoAberto && (
+        <>
+          <button aria-label="Fechar minicarrinho" onClick={() => setMiniCarrinhoAberto(false)} className="fixed inset-0 z-50 bg-black/40" />
+          <aside className="fixed right-0 top-0 z-[60] h-full w-full max-w-md bg-white shadow-2xl flex flex-col animate-slideUpFade">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-5">
+              <div><p className="text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-400">Adicionado com sucesso</p><h2 className="mt-1 text-lg font-black uppercase tracking-wider">Sua sacola</h2></div>
+              <button onClick={() => setMiniCarrinhoAberto(false)} className="w-10 h-10 rounded-full border border-zinc-200 flex items-center justify-center" aria-label="Fechar"><FiX /></button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-5 py-2">
+              {carrinho.map((item) => (
+                <div key={item.cartId} className="flex gap-4 py-5 border-b border-zinc-100">
+                  <img src={item.imagens?.[0]?.url || item.imgUrl} alt={item.nome} className="h-24 w-20 rounded-lg object-cover bg-zinc-100" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold uppercase tracking-wider line-clamp-2">{item.nome}</p>
+                    <p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-500">Tamanho {normalizarTamanho(item.tamanhoEscolhido)} · Qtd. {item.quantidade}</p>
+                    <p className="mt-2 text-sm font-bold">R$ {(Number(item.preco) * item.quantidade).toFixed(2).replace('.', ',')}</p>
+                    <button onClick={() => removerDoCarrinho(item.cartId)} className="mt-2 text-[10px] font-bold uppercase tracking-wider text-red-500">Remover</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-zinc-100 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+              <div className="flex justify-between text-sm font-bold uppercase"><span>Subtotal</span><span>R$ {totalCarrinho.toFixed(2).replace('.', ',')}</span></div>
+              <button onClick={() => { setMiniCarrinhoAberto(false); navegarParaVisao('carrinho'); setEtapaSacola('carrinho'); }} className="mt-5 w-full bg-black text-white py-4 rounded-lg text-xs font-bold uppercase tracking-widest">Ir para a sacola</button>
+              <button onClick={() => setMiniCarrinhoAberto(false)} className="mt-3 w-full py-3 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Continuar comprando</button>
+            </div>
+          </aside>
+        </>
+      )}
+
       {/* Modal de Login e Cadastro (Agora blindado igual ao Login.jsx) */}
       {isLoginAberto && (
         <div 
@@ -1719,6 +1795,7 @@ export default function Loja() {
               setIsRegistro(!isRegistro);
               setErroLogin(null);
               setNomeRegistro('');
+              setAceitouTermosLogin(false);
             }}
             onSubmit={handleAuth}
             loading={carregandoLogin}
@@ -1729,6 +1806,8 @@ export default function Loja() {
             onNameChange={setNomeRegistro}
             onEmailChange={setEmailLogin}
             onPasswordChange={setSenhaLogin}
+            termsAccepted={aceitouTermosLogin}
+            onTermsChange={setAceitouTermosLogin}
             onClose={() => setIsLoginAberto(false)}
             compact
           />
@@ -1798,6 +1877,12 @@ export default function Loja() {
             </div>
           </div>
           <div className="text-center md:text-right text-xs text-zinc-400 tracking-wider">
+            <nav className="mb-6 flex flex-col gap-3 text-[10px] font-bold uppercase">
+              <a href="/termos" className="hover:text-white">Termos e Condicoes</a>
+              <a href="/privacidade" className="hover:text-white">Politica de Privacidade</a>
+              <a href="/trocas-e-devolucoes" className="hover:text-white">Trocas e Devolucoes</a>
+              <a href="/envios-e-prazos" className="hover:text-white">Envios e Prazos</a>
+            </nav>
             © BOO SPORTWEAR. TODOS OS DIREITOS RESERVADOS.
           </div>
         </div>

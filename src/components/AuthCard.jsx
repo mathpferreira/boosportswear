@@ -13,6 +13,8 @@ export default function AuthCard({
   onEmailChange,
   onPasswordChange,
   onClose,
+  termsAccepted = false,
+  onTermsChange,
   compact = false,
   pageMode = false,
 }) {
@@ -45,17 +47,31 @@ export default function AuthCard({
 
       <form className="space-y-5" onSubmit={onSubmit}>
         {isRegister && (
-          <div>
-            <label className={labelClasses}>Nome Completo</label>
-            <input
-              type="text"
-              required
-              value={name}
-              onChange={(e) => onNameChange(e.target.value)}
-              className={inputClasses}
-              placeholder="Maria Silva"
-            />
-          </div>
+          <>
+            <div>
+              <label className={labelClasses}>Nome Completo</label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => onNameChange(e.target.value)}
+                className={inputClasses}
+                placeholder="Maria Silva"
+              />
+            </div>
+            <label className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 cursor-pointer">
+              <input
+                type="checkbox"
+                required
+                checked={termsAccepted}
+                onChange={(e) => onTermsChange?.(e.target.checked)}
+                className="mt-0.5"
+              />
+              <span className="text-[11px] leading-5 text-zinc-600">
+                Aceito os <a href="/termos" target="_blank" rel="noreferrer" className="font-bold underline">Termos e Condições</a> e a <a href="/privacidade" target="_blank" rel="noreferrer" className="font-bold underline">Política de Privacidade</a> da Boo Sportwear.
+              </span>
+            </label>
+          </>
         )}
 
         <div>

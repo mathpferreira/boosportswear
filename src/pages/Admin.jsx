@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/api';
 import { 
   FiMenu,
   FiX,
@@ -24,7 +26,7 @@ import {
 } from 'react-icons/fi';
 
 export default function Admin() {
-  const TAMANHOS_PADRAO = ["P", "M", "G", "Tamanho Único"];
+  const TAMANHOS_PADRAO = ["P", "M", "G", "U"];
   const [isVerificando, setIsVerificando] = useState(true);
   const [isMenuAberto, setIsMenuAberto] = useState(false);
   const [produtos, setProdutos] = useState([]);
@@ -44,7 +46,16 @@ export default function Admin() {
   const itensPorPagina = 8;
 
   // Abas: 'home', 'produtos', 'pedidos', 'categorias', 'usuarios', 'cupons', 'configuracoes' ou 'logs'
-  const [abaAtiva, setAbaAtiva] = useState('home');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const abasValidas = ['home', 'produtos', 'pedidos', 'categorias', 'usuarios', 'cupons', 'configuracoes', 'logs'];
+  const abaDaRota = location.pathname.split('/')[2] || 'home';
+  const abaAtiva = abasValidas.includes(abaDaRota) ? abaDaRota : 'home';
+  const setAbaAtiva = (aba) => {
+    const proximaAba = typeof aba === 'function' ? aba(abaAtiva) : aba;
+    const abaSegura = abasValidas.includes(proximaAba) ? proximaAba : 'home';
+    navigate(abaSegura === 'home' ? '/admin' : `/admin/${abaSegura}`);
+  };
 
   // Pedidos
   const [pedidos, setPedidos] = useState([]);
@@ -103,8 +114,6 @@ export default function Admin() {
   });
 
 const [toast, setToast] = useState({ show: false, msg: "", tipo: "sucesso" });
-
-const API_URL = "http://167.148.161.90/api";
 
 const dispararToast = (msg, tipo = "sucesso") => {
   setToast({ show: true, msg, tipo });

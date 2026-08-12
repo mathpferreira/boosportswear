@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
+import { API_URL } from '../config/api';
 
 export default function Login({ initialMode = 'login' }) {
   const [modoCadastro, setModoCadastro] = useState(initialMode === 'register');
@@ -9,11 +10,10 @@ export default function Login({ initialMode = 'login' }) {
     email: '',
     senha: '',
   });
+  const [aceitouTermos, setAceitouTermos] = useState(false);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
   const navigate = useNavigate();
-
-  const API_URL = "http://167.148.161.90/api";
 
   useEffect(() => {
     setModoCadastro(initialMode === 'register');
@@ -28,6 +28,11 @@ export default function Login({ initialMode = 'login' }) {
       const palavrasNome = formData.nome.trim().split(/\s+/);
       if (palavrasNome.length < 2) {
         setErro('Por favor, insira seu nome e sobrenome completos.');
+        setCarregando(false);
+        return;
+      }
+      if (!aceitouTermos) {
+        setErro('Você precisa aceitar os Termos e Condições da Boo Sportwear.');
         setCarregando(false);
         return;
       }
@@ -96,6 +101,8 @@ export default function Login({ initialMode = 'login' }) {
           onNameChange={(valor) => setFormData(prev => ({ ...prev, nome: valor }))}
           onEmailChange={(valor) => setFormData(prev => ({ ...prev, email: valor }))}
           onPasswordChange={(valor) => setFormData(prev => ({ ...prev, senha: valor }))}
+          termsAccepted={aceitouTermos}
+          onTermsChange={setAceitouTermos}
           pageMode
         />
       </div>
