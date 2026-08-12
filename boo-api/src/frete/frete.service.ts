@@ -1,7 +1,8 @@
-import { BadGatewayException, BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 
 @Injectable()
 export class FreteService {
+  private readonly logger = new Logger(FreteService.name);
   private somenteNumeros(valor: unknown) {
     return String(valor || '').replace(/\D/g, '');
   }
@@ -21,9 +22,11 @@ export class FreteService {
     const peso = Number(process.env.FRENET_PACOTE_PESO || 0.5);
     const subtotal = Number(dados?.subtotal || itens.reduce((total: number, item: any) => total + Number(item.preco || 0) * Number(item.quantidade || 1), 0));
 
-    const resposta = await fetch('https://api.frenet.com.br/shipping/quote', {
+    let resposta: Response;
+    try {
+      resposta = await fetch('https://api.frenet.com.br/shipping/quote', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', token },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', token: token.trim(), 'User-Agent': 'Boo Sportwear (contato@boosportswear.com.br)' },
       body: JSON.stringify({
         SellerCEP: cepOrigem,
         RecipientCEP: cepDestino,
@@ -39,14 +42,20 @@ export class FreteService {
           Category: 'Vestuário',
         })),
       }),
-    });
+      });
+    } catch (erro: any) {
+      this.logger.error(`Falha na cotacao Frenet: ${erro?.message || erro}`);
+      throw new BadGatewayException('O servidor nao conseguiu conectar a Frenet.');
+    }
 
-    const retorno: any = await resposta.json().catch(() => null);
+    const textoResposta = await resposta.text();
+    let retorno: any = null;
+    try { retorno = textoResposta ? JSON.parse(textoResposta) : null; } catch { retorno = null; }
     if (!resposta.ok) throw new BadGatewayException(retorno?.Message || 'Falha ao consultar a Frenet.');
 
-    const servicos = retorno?.ShippingSevicesArray || retorno?.ShippingServicesArray || [];
+    const servicos = retorno?.ShippingSevicesArray || retorno?.ShippingServicesArray || retorno?.ShippingServices || [];
     const opcoes = servicos
-      .filter((servico: any) => !servico.Error && Number(servico.ShippingPrice) >= 0)
+      .filter((servico: any) => !servico.Error && Number.isFinite(Number(servico.ShippingPrice)) && Number(servico.ShippingPrice) >= 0)
       .map((servico: any) => ({
         codigo: servico.ServiceCode,
         nome: servico.ServiceDescription || servico.Carrier,
