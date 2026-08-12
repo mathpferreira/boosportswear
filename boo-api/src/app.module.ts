@@ -9,9 +9,10 @@ import { ConfiguracoesModule } from './configuracoes/configuracoes.module';
 import { PedidosModule } from './pedidos/pedidos.module';
 import { MinhaContaModule } from './minha-conta/minha-conta.module';
 import { CuponsModule } from './cupons/cupons.module';
+import { FreteModule } from './frete/frete.module';
 
 @Module({
-  imports: [AuthModule, ProdutosModule, CategoriasModule, UsersModule, ConfiguracoesModule, PedidosModule, MinhaContaModule, CuponsModule],
+  imports: [AuthModule, ProdutosModule, CategoriasModule, UsersModule, ConfiguracoesModule, PedidosModule, MinhaContaModule, CuponsModule, FreteModule],
   controllers: [AppController],
   providers: [AppService],
 })

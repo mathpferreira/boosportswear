@@ -13,6 +13,7 @@ export default function App() {
         <Route path="/admin/*" element={<Admin />} />
         <Route path="/login" element={<Login />} />
         <Route path="/registro" element={<Login initialMode="register" />} />
+        <Route path="/politicas" element={<Institucional />} />
         <Route path="/termos" element={<Institucional />} />
         <Route path="/privacidade" element={<Institucional />} />
         <Route path="/trocas-e-devolucoes" element={<Institucional />} />

@@ -68,7 +68,7 @@ export default function AuthCard({
                 className="mt-0.5"
               />
               <span className="text-[11px] leading-5 text-zinc-600">
-                Aceito os <a href="/termos" target="_blank" rel="noreferrer" className="font-bold underline">Termos e Condições</a> e a <a href="/privacidade" target="_blank" rel="noreferrer" className="font-bold underline">Política de Privacidade</a> da Boo Sportwear.
+                Li e aceito as <a href="/politicas" target="_blank" rel="noreferrer" className="font-bold underline">Politicas da Loja</a> Boo Sportwear.
               </span>
             </label>
           </>

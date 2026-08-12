@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   FiUser, FiSearch, FiShoppingBag, FiMenu, FiX,
@@ -39,10 +39,11 @@ function CardProduto({ produto, onAbrir }) {
         onClick={() => onAbrir(produto)} 
         className="aspect-[3/4] bg-zinc-100 rounded overflow-hidden mb-4 relative"
       >
-        <img 
+        <img
+          key={`${produto.id}-${imgIndex}`}
           src={fotos[imgIndex]?.url || produto.imgUrl} 
           alt={produto.nome} 
-          className="w-full h-full object-cover group-hover:scale-105 transition-all duration-500" 
+          className="w-full h-full object-cover group-hover:scale-105 transition-all duration-700 animate-imageSwap" 
         />
       </div>
 
@@ -50,7 +51,7 @@ function CardProduto({ produto, onAbrir }) {
         {produto.categoria && (
           <p className="text-[9px] text-zinc-400 font-bold uppercase tracking-widest">{produto.categoria}</p>
         )}
-        {Number(produto.estoque || 0) > 0 && Number(produto.estoque || 0) <= 3 && (
+        {produto.ultimaPeca && (
           <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest">Últimas peças</p>
         )}
         <h4 onClick={() => onAbrir(produto)} className="text-xs font-semibold uppercase tracking-wider text-zinc-800 hover:text-black">
@@ -62,6 +63,26 @@ function CardProduto({ produto, onAbrir }) {
       </div>
     </div>
   );
+}
+
+function Reveal({ children, className = '' }) {
+  const ref = useRef(null);
+  const [visivel, setVisivel] = useState(false);
+
+  useEffect(() => {
+    const elemento = ref.current;
+    if (!elemento) return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setVisivel(true);
+        observer.disconnect();
+      }
+    }, { threshold: 0.12 });
+    observer.observe(elemento);
+    return () => observer.disconnect();
+  }, []);
+
+  return <div ref={ref} className={`${className} reveal-section ${visivel ? 'is-visible' : ''}`}>{children}</div>;
 }
 
 // COMPONENTE PRINCIPAL: Loja
@@ -364,7 +385,7 @@ export default function Loja() {
 
   const produtosNovidades = useMemo(() => [...produtosBrazilian].slice(0, 4), [produtosBrazilian]);
   const produtosUltimasPecas = useMemo(
-    () => produtosBrazilian.filter((produto) => Number(produto.estoque || 0) > 0 && Number(produto.estoque || 0) <= 3).slice(0, 4),
+    () => produtosBrazilian.filter((produto) => produto.ultimaPeca && Number(produto.estoque || 0) > 0).slice(0, 4),
     [produtosBrazilian]
   );
 
@@ -469,19 +490,36 @@ export default function Loja() {
   const descontoCupom = cupomAplicado?.descontoAplicado || 0;
   const totalComFrete = Math.max(totalCarrinho - descontoCupom, 0) + (freteResultado?.valor || 0);
 
-  const calcularFreteConfigurado = () => {
-    if (!cep || cep.length < 8) return;
-    const configFrete = configLoja.frete || {};
-    const valorGratisApos = Number(configFrete.valorGratisApos || 0);
-    const valorBase = Number(configFrete.valorBase || 19.9);
-    const prazo = configFrete.prazo || "3 a 5 dias úteis";
-    const ativo = configFrete.ativo !== false;
-    const valor = ativo && valorGratisApos > 0 && totalCarrinho >= valorGratisApos ? 0 : valorBase;
+  const calcularFreteConfigurado = async () => {
+    const cepLimpo = cep.replace(/\D/g, '');
+    if (cepLimpo.length !== 8) {
+      setFreteResultado({ erro: 'Informe um CEP válido.' });
+      return;
+    }
 
-    setFreteResultado({
-      valor: ativo ? valor : 0,
-      prazo: ativo ? prazo : "Retirada ou frete sob consulta",
-    });
+    setFreteResultado({ carregando: true });
+    const itensCotacao = carrinho.length > 0
+      ? carrinho
+      : produtoSelecionado ? [{ ...produtoSelecionado, quantidade: 1 }] : [];
+    const subtotalCotacao = itensCotacao.reduce((total, item) => total + Number(item.preco || 0) * Number(item.quantidade || 1), 0);
+
+    try {
+      const resposta = await fetch(`${API_URL}/frete/cotar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cep: cepLimpo,
+          subtotal: subtotalCotacao,
+          itens: itensCotacao.map((item) => ({ id: item.id, nome: item.nome, preco: item.preco, quantidade: item.quantidade || 1 })),
+        }),
+      });
+      const dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.message || 'Não foi possível calcular o frete.');
+      const melhorOpcao = dados.opcoes?.[0];
+      setFreteResultado(melhorOpcao ? { ...melhorOpcao, opcoes: dados.opcoes } : { erro: 'Nenhum frete disponível para este CEP.' });
+    } catch (erro) {
+      setFreteResultado({ erro: erro.message });
+    }
   };
 
   const irParaEntrega = () => {
@@ -726,7 +764,7 @@ export default function Loja() {
     if (isRegistro) {
       const palavrasNome = nomeRegistro.trim().split(/\s+/);
       if (!aceitouTermosLogin) {
-        setErroLogin('Voce precisa aceitar os Termos e Condicoes e a Politica de Privacidade.');
+        setErroLogin('Voce precisa aceitar as Politicas da Loja.');
         setCarregandoLogin(false);
         return;
       }
@@ -935,16 +973,6 @@ export default function Loja() {
                         <p className="text-xs font-bold text-zinc-900 truncate">{usuarioLogado.nome || 'Cliente'}</p>
                         <p className="text-[10px] text-zinc-500 truncate mt-0.5">{usuarioLogado.email}</p>
                       </div>
-                      <div className="px-4 pb-2">
-                        <div className="rounded-lg bg-zinc-50 border border-zinc-100 px-3 py-3">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Resumo</p>
-                          <p className="text-xs text-zinc-700 mt-2">
-                            {totalPedidosCliente > 0
-                              ? `${totalPedidosCliente} pedido${totalPedidosCliente > 1 ? 's' : ''} encontrado${totalPedidosCliente > 1 ? 's' : ''}`
-                              : 'Nenhum pedido ainda'}
-                          </p>
-                        </div>
-                      </div>
                       <button
                         onClick={async () => {
                           setIsUserMenuAberto(false);
@@ -1057,20 +1085,19 @@ export default function Loja() {
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div>
                   <button
-                    onClick={() => navegarParaVisao('home')}
-                    className="px-2 py-2 text-left"
+                    onClick={() => { navegarParaVisao('home'); setIsMenuAberto(false); }}
+                    className="w-full px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 transition-colors"
                   >
-                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Navegação</p>
-                    <p className="text-sm font-semibold text-zinc-900 mt-2">Início</p>
+                    <p>Início</p>
                   </button>
                   <button
                     onClick={() => {
                       navegarParaVisao('carrinho');
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    className="px-2 py-2 text-left"
+                    className="hidden"
                   >
                     <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Sacola</p>
                     <p className="text-sm font-semibold text-zinc-900 mt-2">Ver carrinho</p>
@@ -1144,7 +1171,7 @@ export default function Loja() {
 
               <main id="catalogo" className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
                 {produtosNovidades.length > 0 && (
-                  <section className="mb-14">
+                  <Reveal className="mb-14"><section>
                     <div className="mb-6">
                       <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-zinc-400">Curadoria Boo</p>
                       <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tight mt-2">Novidades</h3>
@@ -1154,21 +1181,20 @@ export default function Loja() {
                         <CardProduto key={`novo-${produto.id}`} produto={produto} onAbrir={abrirProduto} />
                       ))}
                     </div>
-                  </section>
+                  </section></Reveal>
                 )}
 
                 {produtosUltimasPecas.length > 0 && (
-                  <section className="mb-14 rounded-[2rem] border border-zinc-200 bg-zinc-50 px-5 py-8 sm:px-8">
+                  <Reveal className="mb-14"><section>
                     <div className="mb-6">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-red-500">Seleção Limitada</p>
-                      <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tight mt-2">Últimas Peças</h3>
+                      <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tight">Últimas Peças</h3>
                     </div>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-8">
                       {produtosUltimasPecas.map((produto) => (
                         <CardProduto key={`ultimas-${produto.id}`} produto={produto} onAbrir={abrirProduto} />
                       ))}
                     </div>
-                  </section>
+                  </section></Reveal>
                 )}
 
                 <div className="flex flex-col gap-6 mb-12 border-b border-zinc-100 pb-6">
@@ -1254,7 +1280,11 @@ export default function Loja() {
                         <button type="button" onClick={calcularFreteConfigurado} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
                       </div>
                       {freteResultado && (
-                        <p className="text-xs text-green-700 font-bold uppercase mt-3 bg-green-50 p-3 rounded animate-fadeIn">Frete: R$ {freteResultado.valor.toFixed(2).replace('.', ',')} ({freteResultado.prazo})</p>
+                        <div className="mt-3 text-xs animate-fadeIn">
+                          {freteResultado.carregando && <p className="text-zinc-500">Consultando transportadoras...</p>}
+                          {freteResultado.erro && <p className="text-red-600">{freteResultado.erro}</p>}
+                          {freteResultado.valor !== undefined && <p className="font-bold text-green-700">{freteResultado.nome}: R$ {freteResultado.valor.toFixed(2).replace('.', ',')} · {freteResultado.prazo}</p>}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1305,8 +1335,10 @@ export default function Loja() {
                   <div className="lg:col-span-2 space-y-6">
                     {etapaSacola === "carrinho" ? (
                       carrinho.map(item => (
-                        <div key={item.cartId} className="flex flex-col sm:flex-row gap-4 border border-zinc-100 p-4 rounded-lg items-start sm:items-center shadow-sm animate-fadeIn">
-                          <img src={item.imgUrl} alt={item.nome} className="w-full sm:w-20 h-48 sm:h-24 object-cover rounded bg-zinc-100" />
+                        <div key={item.cartId} className="flex flex-col sm:flex-row gap-4 py-5 items-start sm:items-center animate-fadeIn">
+                          <div className="w-full sm:w-24 h-64 sm:h-28 bg-zinc-50 flex-shrink-0">
+                            <img src={item.imagens?.[0]?.url || item.imgUrl} alt={item.nome} className="w-full h-full object-contain" />
+                          </div>
                           <div className="flex-1 w-full">
                             <h4 className="text-sm font-bold uppercase">{item.nome}</h4>
                             <p className="text-xs text-zinc-500 uppercase mt-1">Tamanho: {item.tamanhoEscolhido}</p>
@@ -1316,7 +1348,7 @@ export default function Loja() {
                         </div>
                       ))
                     ) : (
-                      <form id="form-checkout" onSubmit={finalizarPedido} className="border border-zinc-100 p-6 rounded-lg shadow-sm space-y-4 animate-slideUpFade">
+                      <form id="form-checkout" onSubmit={finalizarPedido} className="py-6 space-y-4 animate-slideUpFade">
                         <h3 className="font-bold uppercase border-b pb-2 mb-4">Dados de Entrega</h3>
                         <div><label className={labelClasses}>Nome Completo</label><input required value={dadosEntrega.nome} onChange={handleChangeEntrega("nome")} className={inputClasses} /></div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1342,7 +1374,7 @@ export default function Loja() {
                     )}
                   </div>
 
-                  <div className="border border-zinc-100 p-6 rounded-lg shadow-sm h-fit bg-zinc-50">
+                  <div className="py-6 h-fit">
                     <h3 className="font-bold uppercase border-b border-zinc-200 pb-3 mb-4">Resumo do Pedido</h3>
                     <div className="space-y-3 mb-6">
                       <div className="flex justify-between text-sm text-zinc-600"><span>Subtotal</span><span>R$ {totalCarrinho.toFixed(2).replace('.', ',')}</span></div>
@@ -1878,10 +1910,7 @@ export default function Loja() {
           </div>
           <div className="text-center md:text-right text-xs text-zinc-400 tracking-wider">
             <nav className="mb-6 flex flex-col gap-3 text-[10px] font-bold uppercase">
-              <a href="/termos" className="hover:text-white">Termos e Condicoes</a>
-              <a href="/privacidade" className="hover:text-white">Politica de Privacidade</a>
-              <a href="/trocas-e-devolucoes" className="hover:text-white">Trocas e Devolucoes</a>
-              <a href="/envios-e-prazos" className="hover:text-white">Envios e Prazos</a>
+              <a href="/politicas" className="hover:text-white">Politicas da Loja</a>
             </nav>
             © BOO SPORTWEAR. TODOS OS DIREITOS RESERVADOS.
           </div>

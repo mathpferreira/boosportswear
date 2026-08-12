@@ -367,6 +367,7 @@ const normalizarTamanho = (label = "") =>
       categoria: categorias[0]?.nome || "Conjuntos",
       cores: ["#000000"],
       imagens: [],
+      ultimaPeca: false,
       tamanhos: TAMANHOS_PADRAO.map((label) => ({ label: normalizarTamanho(label), estoque: label === "M" ? 1 : 0 }))
     };
     setProdutos([produtoVazio, ...produtos]);
@@ -486,6 +487,7 @@ const handleFileUpload = async (e) => {
       categoria: produtoEditando.categoria || (categorias[0]?.nome || "Conjuntos"),
       cores: produtoEditando.cores,
       imagens: produtoEditando.imagens,
+      ultimaPeca: Boolean(produtoEditando.ultimaPeca),
       imgUrl: produtoEditando.imagens[0]?.url || ""
     };
 
@@ -1453,6 +1455,18 @@ const handleFileUpload = async (e) => {
                         </label>
                       ))}
                     </div>
+                    <label className="flex items-center justify-between gap-4 pt-4 cursor-pointer">
+                      <span>
+                        <span className="block text-xs font-semibold uppercase tracking-wider text-zinc-700">Exibir em Últimas Peças</span>
+                        <span className="block text-[11px] text-zinc-400 mt-1">Controla manualmente a seção especial da loja.</span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(produtoEditando.ultimaPeca)}
+                        onChange={(e) => setProdutoEditando({ ...produtoEditando, ultimaPeca: e.target.checked })}
+                        className="h-5 w-5 accent-black"
+                      />
+                    </label>
                   </div>
 
                   {/* Cores */}
