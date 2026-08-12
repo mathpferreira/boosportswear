@@ -21,6 +21,7 @@ export class ConfiguracoesService {
     fraseTopo?: string;
     instagramUrl?: string;
     emailSuporte?: string;
+    frete?: any;
   }) {
     const config = await this.obter();
 

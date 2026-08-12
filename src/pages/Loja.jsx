@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useParams } from 'react-router-dom';
 import {
   FiUser, FiSearch, FiShoppingBag, FiMenu, FiX,
   FiInstagram, FiMail, FiMapPin, FiCreditCard,
@@ -61,6 +62,7 @@ function CardProduto({ produto, onAbrir }) {
 
 // COMPONENTE PRINCIPAL: Loja
 export default function Loja() {
+  const { id: produtoIdRota } = useParams();
   const [produtosBrazilian, setProdutosBrazilian] = useState([]);
   
   // Controle de visão
@@ -143,7 +145,13 @@ export default function Loja() {
     fraseTopo: "FRETE GRÁTIS A PARTIR DE R$ 250 • PARCELAMENTO EM ATÉ 3X SEM JUROS",
     instagramUrl: "https://instagram.com/boosportwear",
     emailSuporte: "contato@boosportswear.com.br",
-    lojaAberta: true
+    lojaAberta: true,
+    frete: {
+      ativo: true,
+      valorBase: 19.9,
+      valorGratisApos: 250,
+      prazo: "3 a 5 dias úteis"
+    }
   });
 
   const API_URL = "http://167.148.161.90/api";
@@ -173,7 +181,7 @@ export default function Loja() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const navegarParaVisao = (proximaVisao, { replace = false } = {}) => {
+  const navegarParaVisao = (proximaVisao, { replace = false, produtoId = null } = {}) => {
     const rotaHash = {
       home: '',
       produto: 'produto',
@@ -183,7 +191,8 @@ export default function Loja() {
     };
 
     const proximoHash = rotaHash[proximaVisao] || '';
-    const novaUrl = `${window.location.pathname}${proximoHash ? `#${proximoHash}` : ''}`;
+    const pathname = proximaVisao === 'produto' && produtoId ? `/produto/${produtoId}` : '/';
+    const novaUrl = `${pathname}${proximoHash && proximaVisao !== 'produto' ? `#${proximoHash}` : ''}`;
     if (replace) {
       window.history.replaceState({ visao: proximaVisao }, '', novaUrl);
     } else {
@@ -211,6 +220,16 @@ export default function Loja() {
     }
     carregarProdutos();
   }, []);
+
+  useEffect(() => {
+    if (!produtoIdRota || produtosBrazilian.length === 0) return;
+    const produto = produtosBrazilian.find((item) => item.id === produtoIdRota);
+    if (!produto) return;
+    setProdutoSelecionado(produto);
+    setTamanhoEscolhido("M");
+    setIndiceImagemModal(0);
+    setVisaoAtual('produto');
+  }, [produtoIdRota, produtosBrazilian]);
 
   useEffect(() => {
     async function carregarConfiguracoes() {
@@ -250,7 +269,7 @@ export default function Loja() {
     setProdutoSelecionado(produto);
     setTamanhoEscolhido("M");
     setIndiceImagemModal(0);
-    navegarParaVisao('produto');
+    navegarParaVisao('produto', { produtoId: produto.id });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -284,9 +303,45 @@ export default function Loja() {
     setFreteResultado({ valor: 19.90, prazo: "3 a 5 dias úteis" });
   };
 
+  const buscarEnderecoPorCep = async (cepInformado) => {
+    const cepLimpo = (cepInformado || "").replace(/\D/g, "");
+    if (cepLimpo.length !== 8) return null;
+
+    try {
+      const resposta = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+      const dados = await resposta.json();
+      if (dados.erro) return null;
+      return {
+        cep: cepLimpo,
+        rua: dados.logradouro || "",
+        bairro: dados.bairro || "",
+        cidade: dados.localidade || "",
+        estado: dados.uf || "",
+      };
+    } catch (erro) {
+      console.error("Erro ao buscar CEP:", erro);
+      return null;
+    }
+  };
+
   const totalCarrinho = carrinho.reduce((acc, item) => acc + (item.preco * item.quantidade), 0);
   const descontoCupom = cupomAplicado?.descontoAplicado || 0;
   const totalComFrete = Math.max(totalCarrinho - descontoCupom, 0) + (freteResultado?.valor || 0);
+
+  const calcularFreteConfigurado = () => {
+    if (!cep || cep.length < 8) return;
+    const configFrete = configLoja.frete || {};
+    const valorGratisApos = Number(configFrete.valorGratisApos || 0);
+    const valorBase = Number(configFrete.valorBase || 19.9);
+    const prazo = configFrete.prazo || "3 a 5 dias úteis";
+    const ativo = configFrete.ativo !== false;
+    const valor = ativo && valorGratisApos > 0 && totalCarrinho >= valorGratisApos ? 0 : valorBase;
+
+    setFreteResultado({
+      valor: ativo ? valor : 0,
+      prazo: ativo ? prazo : "Retirada ou frete sob consulta",
+    });
+  };
 
   const irParaEntrega = () => {
     if (usuarioLogado) {
@@ -309,6 +364,35 @@ export default function Loja() {
 
   const handleChangeEntrega = (campo) => (e) => {
     setDadosEntrega(prev => ({ ...prev, [campo]: e.target.value }));
+  };
+
+  const preencherCepEntrega = async () => {
+    const endereco = await buscarEnderecoPorCep(dadosEntrega.cep);
+    if (!endereco) return;
+    setDadosEntrega(prev => ({
+      ...prev,
+      cep: endereco.cep,
+      rua: prev.rua || endereco.rua,
+      bairro: prev.bairro || endereco.bairro,
+      cidade: prev.cidade || endereco.cidade,
+      estado: prev.estado || endereco.estado,
+    }));
+  };
+
+  const preencherCepConta = async () => {
+    const endereco = await buscarEnderecoPorCep(dadosConta.enderecoPadrao?.cep);
+    if (!endereco) return;
+    setDadosConta(prev => ({
+      ...prev,
+      enderecoPadrao: {
+        ...prev.enderecoPadrao,
+        cep: endereco.cep,
+        rua: prev.enderecoPadrao.rua || endereco.rua,
+        bairro: prev.enderecoPadrao.bairro || endereco.bairro,
+        cidade: prev.enderecoPadrao.cidade || endereco.cidade,
+        estado: prev.enderecoPadrao.estado || endereco.estado,
+      }
+    }));
   };
 
   const aplicarCupom = async () => {
@@ -471,6 +555,8 @@ export default function Loja() {
     setPedidoExpandido(null);
     localStorage.removeItem('token');
     localStorage.removeItem('usuario');
+    localStorage.removeItem('@BOO:token');
+    localStorage.removeItem('@BOO:usuario');
   };
 
   const abrirMinhaConta = async () => {
@@ -523,10 +609,12 @@ export default function Loja() {
         throw new Error(dados.message || (isRegistro ? "Erro ao criar conta. Tente outro e-mail." : "Credenciais inválidas."));
       }
       
-      // Salva no LocalStorage (igual ao Login.jsx)
+      // Salva no LocalStorage para loja e painel compartilharem a mesma sessão
       if (dados.token) {
         localStorage.setItem('token', dados.token);
         localStorage.setItem('usuario', JSON.stringify(dados.usuario));
+        localStorage.setItem('@BOO:token', dados.token);
+        localStorage.setItem('@BOO:usuario', JSON.stringify(dados.usuario));
       }
 
       const usuarioAutenticado = dados.usuario || { email: emailLogin, nome: nomeRegistro };
@@ -724,9 +812,14 @@ export default function Loja() {
         {/* CONTEÚDO PRINCIPAL */}
         {isMenuAberto && (
           <>
-            <div className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setIsMenuAberto(false)}></div>
-            <div className="md:hidden sticky top-16 z-40 border-b border-zinc-100 bg-white shadow-lg animate-fadeIn">
-              <div className="px-4 py-4 space-y-4">
+            <div className="fixed inset-0 z-40 bg-black/40 md:hidden" onClick={() => setIsMenuAberto(false)}></div>
+            <aside className="md:hidden fixed left-0 top-0 z-50 h-full w-[88vw] max-w-sm bg-white shadow-2xl border-r border-zinc-200 animate-slideUpFade">
+              <div className="flex items-center justify-between px-4 py-4 border-b border-zinc-100">
+                <button onClick={() => setIsMenuAberto(false)} className="w-10 h-10 rounded-full border border-zinc-200 inline-flex items-center justify-center">
+                  <FiX className="text-lg" />
+                </button>
+              </div>
+              <div className="px-4 py-4 space-y-4 overflow-y-auto h-[calc(100%-73px)]">
                 <div className="flex items-center gap-2 rounded-2xl border border-zinc-200 px-3 py-2">
                   <FiSearch className="text-sm text-zinc-400" />
                   <input
@@ -813,7 +906,7 @@ export default function Loja() {
                   </button>
                 )}
               </div>
-            </div>
+            </aside>
           </>
         )}
 
@@ -891,7 +984,7 @@ export default function Loja() {
                       <label className={labelClasses}>Calcular Frete</label>
                        <div className="flex flex-col sm:flex-row gap-2 max-w-sm">
                         <input type="text" placeholder="00000-000" value={cep} onChange={(e) => setCep(e.target.value)} className={inputClasses} />
-                        <button type="button" onClick={calcularFrete} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
+                        <button type="button" onClick={calcularFreteConfigurado} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
                       </div>
                       {freteResultado && (
                         <p className="text-xs text-green-700 font-bold uppercase mt-3 bg-green-50 p-3 rounded animate-fadeIn">Frete: R$ {freteResultado.valor.toFixed(2).replace('.', ',')} ({freteResultado.prazo})</p>
@@ -1090,23 +1183,6 @@ export default function Loja() {
                     </div>
                   </div>
 
-                  <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
-                    <p className="text-sm font-black uppercase tracking-wider">Status da Conta</p>
-                    <div className="mt-4 space-y-3 text-xs text-zinc-600">
-                      <div className="flex items-center justify-between">
-                        <span className="uppercase font-bold text-zinc-500">Cadastro</span>
-                        <span className="font-bold">{contaCompleta ? 'Completo' : 'Pendente'}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="uppercase font-bold text-zinc-500">Pedidos</span>
-                        <span className="font-bold">{totalPedidosCliente}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="uppercase font-bold text-zinc-500">WhatsApp</span>
-                        <span className="font-bold">{dadosConta.preferenciasConta.statusPedidoWhatsApp ? 'Ativar backend' : 'Desligado'}</span>
-                      </div>
-                    </div>
-                  </div>
                 </aside>
 
                 <div className="space-y-6">
@@ -1185,6 +1261,7 @@ export default function Loja() {
                       <input
                         value={dadosConta.enderecoPadrao.cep}
                         onChange={(e) => setDadosConta(prev => ({ ...prev, enderecoPadrao: { ...prev.enderecoPadrao, cep: e.target.value } }))}
+                        onBlur={preencherCepConta}
                         className={inputClasses}
                       />
                     </div>

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
+  FiMenu,
+  FiX,
   FiPackage, 
   FiSettings, 
   FiLogOut, 
@@ -23,6 +25,7 @@ import {
 
 export default function Admin() {
   const [isVerificando, setIsVerificando] = useState(true);
+  const [isMenuAberto, setIsMenuAberto] = useState(false);
   const [produtos, setProdutos] = useState([]);
   const [produtoEditando, setProdutoEditando] = useState(null);
   const [novaCorHex, setNovaCorHex] = useState("#000000");
@@ -83,7 +86,13 @@ export default function Admin() {
     fraseTopo: "FRETE GRÁTIS A PARTIR DE R$ 250 • PARCELAMENTO EM ATÉ 3X SEM JUROS",
     instagramUrl: "https://instagram.com/boosportswear",
     emailSuporte: "contato@boosportswear.com.br",
-    lojaAberta: true
+    lojaAberta: true,
+    frete: {
+      ativo: true,
+      valorBase: 19.9,
+      valorGratisApos: 250,
+      prazo: "3 a 5 dias úteis"
+    }
   });
 
 const [toast, setToast] = useState({ show: false, msg: "", tipo: "sucesso" });
@@ -142,7 +151,10 @@ const dispararToast = (msg, tipo = "sucesso") => {
   const carregarPedidos = async () => {
     setCarregandoPedidos(true);
     try {
-      const res = await fetch(`${API_URL}/pedidos`);
+      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/pedidos`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       if (res.ok) {
         const data = await res.json();
         setPedidos(data);
@@ -160,9 +172,10 @@ const dispararToast = (msg, tipo = "sucesso") => {
   // Atualiza o status de um pedido (ex: pendente -> pago -> enviado -> entregue)
   const atualizarStatusPedido = async (pedidoId, novoStatus) => {
     try {
+      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
       const res = await fetch(`${API_URL}/pedidos/${pedidoId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ status: novoStatus })
       });
       if (res.ok) {
@@ -216,7 +229,13 @@ const dispararToast = (msg, tipo = "sucesso") => {
           fraseTopo: data.fraseTopo || "",
           instagramUrl: data.instagramUrl || "",
           emailSuporte: data.emailSuporte || "",
-          lojaAberta: data.lojaAberta ?? true
+          lojaAberta: data.lojaAberta ?? true,
+          frete: data.frete || {
+            ativo: true,
+            valorBase: 19.9,
+            valorGratisApos: 250,
+            prazo: "3 a 5 dias úteis"
+          }
         });
       }
     } catch (e) {
@@ -274,8 +293,8 @@ const dispararToast = (msg, tipo = "sucesso") => {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('@BOO:token');
-    const usuarioSalvo = localStorage.getItem('@BOO:usuario');
+    const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
+    const usuarioSalvo = localStorage.getItem('@BOO:usuario') || localStorage.getItem('usuario');
 
     if (!token || !usuarioSalvo) {
       window.location.href = '/login';
@@ -283,6 +302,9 @@ const dispararToast = (msg, tipo = "sucesso") => {
     }
 
     const usuario = JSON.parse(usuarioSalvo);
+    localStorage.setItem('@BOO:token', token);
+    localStorage.setItem('@BOO:usuario', usuarioSalvo);
+
     if (usuario.role !== 'ADMIN') {
       window.location.href = '/';
       return;
@@ -296,6 +318,10 @@ const dispararToast = (msg, tipo = "sucesso") => {
     carregarConfiguracoes();
     carregarCupons();
   }, []);
+
+  useEffect(() => {
+    setIsMenuAberto(false);
+  }, [abaAtiva]);
 
   const criarNovoProduto = () => {
     const produtoVazio = {
@@ -466,7 +492,13 @@ const handleFileUpload = async (e) => {
           fraseTopo: data.fraseTopo || "",
           instagramUrl: data.instagramUrl || "",
           emailSuporte: data.emailSuporte || "",
-          lojaAberta: data.lojaAberta ?? true
+          lojaAberta: data.lojaAberta ?? true,
+          frete: data.frete || {
+            ativo: true,
+            valorBase: 19.9,
+            valorGratisApos: 250,
+            prazo: "3 a 5 dias úteis"
+          }
         });
         dispararToast("Configurações atualizadas com sucesso!");
       } else {
@@ -707,7 +739,7 @@ const handleFileUpload = async (e) => {
     <div className="flex min-h-screen flex-col bg-zinc-50 text-zinc-900 font-sans relative overflow-hidden lg:h-screen lg:flex-row">
       
 {toast.show && (
-  <div className={`fixed top-6 right-6 z-50 text-white px-6 py-3 rounded-lg shadow-xl text-xs uppercase tracking-widest font-medium flex items-center gap-2 transition-all ${toast.tipo === 'erro' ? 'bg-red-600' : 'bg-black'}`}>
+  <div className={`fixed top-4 right-4 sm:top-6 sm:right-6 z-50 text-white px-4 sm:px-6 py-3 rounded-lg shadow-xl text-[10px] sm:text-xs uppercase tracking-widest font-medium flex items-center gap-2 transition-all ${toast.tipo === 'erro' ? 'bg-red-600' : 'bg-black'}`}>
     {toast.tipo === 'erro' ? (
       <FiAlertTriangle className="text-white text-base" />
     ) : (
@@ -718,7 +750,7 @@ const handleFileUpload = async (e) => {
 )}
 
       {/* SIDEBAR COM HEADER CENTRALIZADO COMO ANTES */}
-      <aside className="w-full lg:w-64 bg-white border-b lg:border-b-0 lg:border-r border-zinc-200 flex flex-col justify-between flex-shrink-0 p-4 lg:p-6">
+      <aside className="hidden lg:flex w-full lg:w-64 bg-white border-b lg:border-b-0 lg:border-r border-zinc-200 flex-col justify-between flex-shrink-0 p-4 lg:p-6">
         <div>
           {/* LOGO CENTRALIZADA COM DIVISOR */}
           <div className="h-16 lg:h-20 flex items-center justify-center border-b border-zinc-100 -mx-4 lg:-mx-6 -mt-4 lg:-mt-6 mb-4 lg:mb-6">
@@ -807,6 +839,92 @@ const handleFileUpload = async (e) => {
           </button>
         </div>
       </aside>
+
+      <div className="lg:hidden sticky top-0 z-40 bg-white border-b border-zinc-200 px-4 py-3 flex items-center justify-between">
+        <div>
+          <h1 className="text-sm uppercase tracking-[0.05em]"><span className="font-light text-zinc-400">BOO</span><span className="font-bold text-black">ADMIN</span></h1>
+        </div>
+        <button
+          onClick={() => setIsMenuAberto((prev) => !prev)}
+          className="w-10 h-10 rounded-full border border-zinc-200 inline-flex items-center justify-center text-zinc-700"
+          aria-label="Abrir menu do painel"
+        >
+          {isMenuAberto ? <FiX className="text-lg" /> : <FiMenu className="text-lg" />}
+        </button>
+      </div>
+
+      {isMenuAberto && (
+        <>
+          <div className="lg:hidden fixed inset-0 z-40 bg-black/35" onClick={() => setIsMenuAberto(false)}></div>
+          <aside className="lg:hidden fixed top-0 left-0 z-50 h-full w-[88vw] max-w-xs bg-white border-r border-zinc-200 p-5 flex flex-col justify-between shadow-2xl">
+            <div>
+              <div className="flex items-center justify-between pb-5 border-b border-zinc-100">
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-400 font-bold">BOO</p>
+                  <h2 className="text-base uppercase tracking-[0.05em]"><span className="font-light text-zinc-400">BOO</span><span className="font-bold text-black">ADMIN</span></h2>
+                </div>
+                <button
+                  onClick={() => setIsMenuAberto(false)}
+                  className="w-9 h-9 rounded-full border border-zinc-200 inline-flex items-center justify-center text-zinc-700"
+                >
+                  <FiX />
+                </button>
+              </div>
+
+              <nav className="space-y-2 mt-5">
+                <button onClick={() => { setAbaAtiva('home'); setProdutoEditando(null); setIsMenuAberto(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-xs tracking-wider uppercase transition-colors ${abaAtiva === 'home' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}>
+                  <FiHome className="text-base" />
+                  Início
+                </button>
+                <button onClick={() => { setAbaAtiva('produtos'); setProdutoEditando(null); setIsMenuAberto(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-xs tracking-wider uppercase transition-colors ${abaAtiva === 'produtos' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}>
+                  <FiPackage className="text-base" />
+                  Produtos
+                </button>
+                <button onClick={() => { setAbaAtiva('pedidos'); setPedidoSelecionado(null); setIsMenuAberto(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-xs tracking-wider uppercase transition-colors ${abaAtiva === 'pedidos' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}>
+                  <FiShoppingBag className="text-base" />
+                  Pedidos
+                  {pedidosPendentes > 0 && (
+                    <span className="ml-auto bg-amber-400 text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full">{pedidosPendentes}</span>
+                  )}
+                </button>
+                <button onClick={() => { setAbaAtiva('categorias'); setProdutoEditando(null); setCategoriaEditando(null); setIsMenuAberto(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-xs tracking-wider uppercase transition-colors ${abaAtiva === 'categorias' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}>
+                  <FiTag className="text-base" />
+                  Categorias
+                </button>
+                <button onClick={() => { setAbaAtiva('usuarios'); setUsuarioParaAlterarRole(null); setIsMenuAberto(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-xs tracking-wider uppercase transition-colors ${abaAtiva === 'usuarios' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}>
+                  <FiUsers className="text-base" />
+                  Usuários
+                </button>
+                <button onClick={() => { setAbaAtiva('cupons'); setIsMenuAberto(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-xs tracking-wider uppercase transition-colors ${abaAtiva === 'cupons' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}>
+                  <FiDollarSign className="text-base" />
+                  Cupons
+                </button>
+                <button onClick={() => { setAbaAtiva('configuracoes'); setProdutoEditando(null); setIsMenuAberto(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium text-xs tracking-wider uppercase transition-colors ${abaAtiva === 'configuracoes' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}>
+                  <FiSettings className="text-base" />
+                  Configurações
+                </button>
+              </nav>
+            </div>
+
+            <div className="pt-5 border-t border-zinc-100">
+              <button
+                onClick={() => { window.open('/', '_blank', 'noopener,noreferrer'); }}
+                className="w-full flex items-center gap-3 px-4 py-3 mb-2 text-zinc-600 hover:bg-zinc-100 rounded-xl text-xs tracking-wider uppercase font-medium transition-colors cursor-pointer"
+              >
+                <FiArrowLeft className="text-base" />
+                Voltar ao Site
+              </button>
+              <button 
+                onClick={() => { localStorage.clear(); window.location.href='/login'; }}
+                className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl text-xs tracking-wider uppercase font-medium transition-colors cursor-pointer"
+              >
+                <FiLogOut className="text-base" />
+                Sair
+              </button>
+            </div>
+          </aside>
+        </>
+      )}
 
       {/* CONTEÚDO PRINCIPAL */}
       <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10">
@@ -1429,19 +1547,18 @@ const handleFileUpload = async (e) => {
         {/* ABA USUÁRIOS */}
         {abaAtiva === 'usuarios' && (
           <div className="max-w-4xl mx-auto">
-            <header className="mb-8 flex items-center justify-between">
+            <header className="mb-6 flex flex-col gap-4 sm:mb-8">
               <div>
                 <h2 className="text-2xl font-normal tracking-tight">Usuários</h2>
-                <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider">Gerencie contas e permissões de acesso.</p>
               </div>
-              <div className="relative">
+              <div className="relative w-full sm:max-w-sm">
                 <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm" />
                 <input
                   type="text"
                   placeholder="Buscar por nome ou e-mail..."
                   value={termoBuscaUsuario}
                   onChange={(e) => setTermoBuscaUsuario(e.target.value)}
-                  className="pl-9 pr-4 py-2 border border-zinc-200 rounded-lg text-sm w-72 focus:outline-none focus:border-black"
+                  className="pl-9 pr-4 py-3 border border-zinc-200 rounded-xl text-sm w-full bg-white focus:outline-none focus:border-black"
                 />
               </div>
             </header>
@@ -1449,13 +1566,13 @@ const handleFileUpload = async (e) => {
             {carregandoUsuarios ? (
               <p className="text-sm text-zinc-400">Carregando usuários...</p>
             ) : (
-              <div className="bg-white border border-zinc-200 rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
+              <div className="bg-white border border-zinc-200 rounded-xl overflow-x-auto">
+                <table className="w-full min-w-[760px] text-sm">
                   <thead>
                     <tr className="border-b border-zinc-100 text-left text-[10px] uppercase tracking-wider text-zinc-400">
-                      <th className="px-6 py-3 font-medium">Nome</th>
-                      <th className="px-6 py-3 font-medium">E-mail</th>
-                      <th className="px-6 py-3 font-medium">Cadastrado em</th>
+                      <th className="px-4 py-3 font-medium">Nome</th>
+                      <th className="px-4 py-3 font-medium">E-mail</th>
+                      <th className="px-4 py-3 font-medium">Cadastrado em</th>
                       <th className="px-6 py-3 font-medium">Permissão</th>
                       <th className="px-6 py-3 font-medium text-right">Ações</th>
                     </tr>
@@ -1463,12 +1580,12 @@ const handleFileUpload = async (e) => {
                   <tbody>
                     {usuariosFiltrados.map(u => (
                         <tr key={u.id} className="border-b border-zinc-50 last:border-0 hover:bg-zinc-50">
-                          <td className="px-6 py-4 font-medium text-zinc-800">{u.nome}</td>
-                          <td className="px-6 py-4 text-zinc-500">{u.email}</td>
-                          <td className="px-6 py-4 text-zinc-500">
+                          <td className="px-4 py-3 font-medium text-zinc-800 text-xs sm:text-sm">{u.nome}</td>
+                          <td className="px-4 py-3 text-zinc-500 text-xs sm:text-sm">{u.email}</td>
+                          <td className="px-4 py-3 text-zinc-500 text-xs sm:text-sm">
                             {new Date(u.createdAt).toLocaleDateString('pt-BR')}
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-3">
                             {u.role === 'ADMIN' ? (
                               <span className="inline-flex items-center gap-1 bg-black text-white text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full">
                                 <FiShield className="text-[11px]" /> Admin
@@ -1479,7 +1596,7 @@ const handleFileUpload = async (e) => {
                               </span>
                             )}
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-4 py-3 text-right">
                             <div className="relative inline-flex justify-end">
                               <button
                                 onClick={() => setMenuUsuarioAberto(menuUsuarioAberto === u.id ? null : u.id)}
@@ -1664,6 +1781,44 @@ const handleFileUpload = async (e) => {
                   className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30"
                   required 
                 />
+              </div>
+
+              <div className="border-t border-zinc-100 pt-6 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900">Frete da Loja</p>
+                  <p className="text-xs text-zinc-500 mt-1">Defina frete base, faixa de frete grátis e prazo exibido.</p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Valor base</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={configLoja.frete?.valorBase ?? 19.9}
+                      onChange={(e) => setConfigLoja({ ...configLoja, frete: { ...configLoja.frete, valorBase: Number(e.target.value || 0) } })}
+                      className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Frete grátis após</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={configLoja.frete?.valorGratisApos ?? 250}
+                      onChange={(e) => setConfigLoja({ ...configLoja, frete: { ...configLoja.frete, valorGratisApos: Number(e.target.value || 0) } })}
+                      className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Prazo exibido</label>
+                  <input
+                    type="text"
+                    value={configLoja.frete?.prazo || "3 a 5 dias úteis"}
+                    onChange={(e) => setConfigLoja({ ...configLoja, frete: { ...configLoja.frete, prazo: e.target.value } })}
+                    className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30"
+                  />
+                </div>
               </div>
 
               <div className="flex justify-end pt-4 border-t border-zinc-100">

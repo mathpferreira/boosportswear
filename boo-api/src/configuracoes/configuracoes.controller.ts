@@ -35,6 +35,7 @@ export class ConfiguracoesAdminController {
       fraseTopo?: string;
       instagramUrl?: string;
       emailSuporte?: string;
+      frete?: any;
     },
   ) {
     return this.configuracoesService.atualizar(body);

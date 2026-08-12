@@ -71,6 +71,7 @@ model Configuracao {
   fraseTopo    String   @default("FRETE GRÁTIS ACIMA DE R$ 299")
   instagramUrl String   @default("")
   emailSuporte String   @default("")
+  frete        Json?
   atualizadoEm DateTime @updatedAt
 }
 
