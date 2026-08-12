@@ -715,8 +715,8 @@ export default function Loja() {
 
         {/* Header */}
         <header className="bg-white border-b border-zinc-100 sticky top-0 z-30">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between gap-3 sm:gap-4">
-            <div className="flex items-center gap-3 sm:gap-4">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 grid grid-cols-[auto_1fr_auto] items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
               <button onClick={() => setIsMenuAberto(v => !v)} className="md:hidden cursor-pointer hover:opacity-75 transition-opacity">
                 {isMenuAberto ? <FiX className="text-lg" /> : <FiMenu className="text-lg" />}
               </button>
@@ -724,14 +724,17 @@ export default function Loja() {
                 onClick={() => navegarParaVisao('home')}
                 src={logo}
                 alt="BOO Sportswear"
-                className="h-8 sm:h-10 w-auto cursor-pointer select-none"
+                className="h-7 sm:h-9 w-auto cursor-pointer select-none"
               />
-              <span className="md:hidden text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-900">
+            </div>
+
+            <div className="md:hidden flex justify-center">
+              <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.28em] text-zinc-900 whitespace-nowrap">
                 BOO SPORTWEAR
               </span>
             </div>
 
-            <div className="flex items-center gap-4 sm:gap-5">
+            <div className="flex items-center justify-end gap-4 sm:gap-5">
               <div className="hidden sm:flex items-center">
                 {isBuscaAberta ? (
                   <input

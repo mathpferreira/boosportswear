@@ -351,7 +351,11 @@ const dispararToast = (msg, tipo = "sucesso") => {
       setProdutos(produtos.filter(prod => prod.id !== produtoParaExcluir.id));
     } else {
       try {
-        await fetch(`${API_URL}/produtos/${produtoParaExcluir.id}`, { method: 'DELETE' });
+        const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
+        await fetch(`${API_URL}/produtos/${produtoParaExcluir.id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
         setProdutos(produtos.filter(prod => prod.id !== produtoParaExcluir.id));
       } catch (e) {
         console.error(e);
@@ -458,10 +462,14 @@ const handleFileUpload = async (e) => {
     try {
       const endpoint = produtoEditando.isNew ? `${API_URL}/produtos` : `${API_URL}/produtos/${produtoEditando.id}`;
       const method = produtoEditando.isNew ? 'POST' : 'PUT';
+      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
 
       const res = await fetch(endpoint, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(payload)
       });
 
