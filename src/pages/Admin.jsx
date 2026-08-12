@@ -704,7 +704,7 @@ const handleFileUpload = async (e) => {
   }
 
   return (
-    <div className="flex h-screen bg-zinc-50 text-zinc-900 font-sans relative overflow-hidden">
+    <div className="flex min-h-screen flex-col bg-zinc-50 text-zinc-900 font-sans relative overflow-hidden lg:h-screen lg:flex-row">
       
 {toast.show && (
   <div className={`fixed top-6 right-6 z-50 text-white px-6 py-3 rounded-lg shadow-xl text-xs uppercase tracking-widest font-medium flex items-center gap-2 transition-all ${toast.tipo === 'erro' ? 'bg-red-600' : 'bg-black'}`}>
@@ -718,16 +718,16 @@ const handleFileUpload = async (e) => {
 )}
 
       {/* SIDEBAR COM HEADER CENTRALIZADO COMO ANTES */}
-      <aside className="w-64 bg-white border-r border-zinc-200 flex flex-col justify-between flex-shrink-0 p-6">
+      <aside className="w-full lg:w-64 bg-white border-b lg:border-b-0 lg:border-r border-zinc-200 flex flex-col justify-between flex-shrink-0 p-4 lg:p-6">
         <div>
           {/* LOGO CENTRALIZADA COM DIVISOR */}
-          <div className="h-20 flex items-center justify-center border-b border-zinc-100 -mx-6 -mt-6 mb-6">
+          <div className="h-16 lg:h-20 flex items-center justify-center border-b border-zinc-100 -mx-4 lg:-mx-6 -mt-4 lg:-mt-6 mb-4 lg:mb-6">
             <h1 className="text-xl tracking-[0.05em] uppercase">
               <span className="font-light text-zinc-400">BOO</span><span className="font-bold text-black">ADMIN</span>
             </h1>
           </div>
 
-          <nav className="space-y-1">
+          <nav className="grid grid-cols-2 gap-2 lg:grid-cols-1 lg:space-y-1">
             <button 
               onClick={() => { setAbaAtiva('home'); setProdutoEditando(null); }} 
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors cursor-pointer ${abaAtiva === 'home' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}
@@ -768,7 +768,7 @@ const handleFileUpload = async (e) => {
             </button>
             <button 
               onClick={() => { setAbaAtiva('configuracoes'); setProdutoEditando(null); }} 
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors cursor-pointer ${abaAtiva === 'configuracoes' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}
+              className={`hidden w-full items-center gap-3 px-4 py-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors cursor-pointer ${abaAtiva === 'configuracoes' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}
             >
               <FiSettings className="text-base" />
               Configurações
@@ -780,10 +780,17 @@ const handleFileUpload = async (e) => {
               <FiDollarSign className="text-base" />
               Cupons
             </button>
+            <button 
+              onClick={() => { setAbaAtiva('configuracoes'); setProdutoEditando(null); }} 
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors cursor-pointer ${abaAtiva === 'configuracoes' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}
+            >
+              <FiSettings className="text-base" />
+              Configurações
+            </button>
           </nav>
         </div>
 
-        <div className="pt-6 border-t border-zinc-100">
+        <div className="pt-4 lg:pt-6 border-t border-zinc-100 mt-4 lg:mt-6">
           <button
             onClick={() => { window.open('/', '_blank', 'noopener,noreferrer'); }}
             className="w-full flex items-center gap-3 px-4 py-2 mb-2 text-zinc-600 hover:bg-zinc-100 rounded-lg text-xs tracking-wider uppercase font-medium transition-colors cursor-pointer"
@@ -802,7 +809,7 @@ const handleFileUpload = async (e) => {
       </aside>
 
       {/* CONTEÚDO PRINCIPAL */}
-      <main className="flex-1 overflow-y-auto p-10">
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10">
         
         {/* ABA HOME / DASHBOARD */}
         {abaAtiva === 'home' && (
@@ -1486,15 +1493,13 @@ const handleFileUpload = async (e) => {
                                 <div className="absolute right-0 top-11 z-20 w-52 rounded-xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
                                   <button
                                     onClick={() => abrirConfirmacaoRole(u, 'ADMIN')}
-                                    disabled={u.role === 'ADMIN'}
-                                    className="w-full text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                                    className={`${u.role === 'ADMIN' ? 'hidden' : 'w-full'} text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 cursor-pointer transition-colors`}
                                   >
                                     Tornar Administrador
                                   </button>
                                   <button
                                     onClick={() => abrirConfirmacaoRole(u, 'CLIENTE')}
-                                    disabled={u.role === 'CLIENTE'}
-                                    className="w-full text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                                    className={`${u.role === 'CLIENTE' ? 'hidden' : 'w-full'} text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 cursor-pointer transition-colors`}
                                   >
                                     Tornar Usuário
                                   </button>
@@ -1640,7 +1645,7 @@ const handleFileUpload = async (e) => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Link do Instagram</label>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Instagram (@ ou link)</label>
                 <input 
                   type="text" 
                   value={configLoja.instagramUrl} 

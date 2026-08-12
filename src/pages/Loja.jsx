@@ -5,6 +5,7 @@ import {
   FiShield, FiPackage, FiChevronRight
 } from 'react-icons/fi';
 
+import AuthCard from "../components/AuthCard";
 import logo from "../assets/logo.png";
 
 // COMPONENTE: Card do Produto
@@ -190,6 +191,11 @@ export default function Loja() {
     }
     setVisaoAtual(proximaVisao);
   };
+
+  useEffect(() => {
+    setIsMenuAberto(false);
+    setIsUserMenuAberto(false);
+  }, [visaoAtual]);
 
   useEffect(() => {
     async function carregarProdutos() {
@@ -585,26 +591,26 @@ export default function Loja() {
       `}</style>
 
       <div>
-        <div className={`text-white text-[10px] tracking-[0.2em] py-2.5 px-4 text-center font-medium uppercase transition-colors ${configLoja.lojaAberta ? "bg-black" : "bg-zinc-700"}`}>
+        <div className={`text-white text-[9px] sm:text-[10px] tracking-[0.16em] sm:tracking-[0.2em] py-2.5 px-3 sm:px-4 text-center font-medium uppercase transition-colors ${configLoja.lojaAberta ? "bg-black" : "bg-zinc-700"}`}>
           {configLoja.lojaAberta ? configLoja.fraseTopo : "LOJA TEMPORARIAMENTE FECHADA PARA NOVOS PEDIDOS"}
         </div>
 
         {/* Header */}
         <header className="bg-white border-b border-zinc-100 sticky top-0 z-30">
-          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between gap-3 sm:gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
               <button onClick={() => setIsMenuAberto(v => !v)} className="md:hidden cursor-pointer hover:opacity-75 transition-opacity">
                 {isMenuAberto ? <FiX className="text-lg" /> : <FiMenu className="text-lg" />}
               </button>
               <img
-                onClick={() => setVisaoAtual('home')}
+                onClick={() => navegarParaVisao('home')}
                 src={logo}
                 alt="BOO Sportswear"
-                className="h-10 w-auto cursor-pointer select-none"
+                className="h-8 sm:h-10 w-auto cursor-pointer select-none"
               />
             </div>
 
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-4 sm:gap-5">
               <div className="hidden sm:flex items-center">
                 {isBuscaAberta ? (
                   <input
@@ -701,7 +707,7 @@ export default function Loja() {
               </div>
 
               <button
-                onClick={() => { setVisaoAtual('carrinho'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                onClick={() => { navegarParaVisao('carrinho'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                 className="relative cursor-pointer hover:opacity-75 transition-opacity"
               >
                 <FiShoppingBag className="text-base" />
@@ -716,16 +722,111 @@ export default function Loja() {
         </header>
 
         {/* CONTEÚDO PRINCIPAL */}
+        {isMenuAberto && (
+          <>
+            <div className="fixed inset-0 z-30 bg-black/30 md:hidden" onClick={() => setIsMenuAberto(false)}></div>
+            <div className="md:hidden sticky top-16 z-40 border-b border-zinc-100 bg-white shadow-lg animate-fadeIn">
+              <div className="px-4 py-4 space-y-4">
+                <div className="flex items-center gap-2 rounded-2xl border border-zinc-200 px-3 py-2">
+                  <FiSearch className="text-sm text-zinc-400" />
+                  <input
+                    type="text"
+                    value={termoBusca}
+                    onChange={(e) => {
+                      setTermoBusca(e.target.value);
+                      if (visaoAtual !== 'home') navegarParaVisao('home');
+                    }}
+                    placeholder="Buscar produto..."
+                    className="w-full bg-transparent text-sm focus:outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => navegarParaVisao('home')}
+                    className="rounded-2xl border border-zinc-200 px-4 py-3 text-left"
+                  >
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Navegação</p>
+                    <p className="text-sm font-semibold text-zinc-900 mt-2">Início</p>
+                  </button>
+                  <button
+                    onClick={() => {
+                      navegarParaVisao('carrinho');
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="rounded-2xl border border-zinc-200 px-4 py-3 text-left"
+                  >
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Sacola</p>
+                    <p className="text-sm font-semibold text-zinc-900 mt-2">Ver carrinho</p>
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-zinc-200 overflow-hidden">
+                  <button
+                    onClick={async () => {
+                      if (!usuarioLogado) {
+                        setIsMenuAberto(false);
+                        setIsLoginAberto(true);
+                        return;
+                      }
+                      await abrirMinhaConta();
+                    }}
+                    className="w-full px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 transition-colors"
+                  >
+                    Minha Conta
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!usuarioLogado) {
+                        setIsMenuAberto(false);
+                        setIsLoginAberto(true);
+                        return;
+                      }
+                      await abrirMeusPedidos();
+                    }}
+                    className="w-full px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 transition-colors border-t border-zinc-100"
+                  >
+                    Meus Pedidos
+                  </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        setIsMenuAberto(false);
+                        window.open('/admin', '_blank', 'noopener,noreferrer');
+                      }}
+                      className="w-full px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 transition-colors border-t border-zinc-100"
+                    >
+                      Ir para o Gerenciador
+                    </button>
+                  )}
+                </div>
+
+                {!usuarioLogado && (
+                  <button
+                    onClick={() => {
+                      setIsMenuAberto(false);
+                      setIsLoginAberto(true);
+                    }}
+                    className="w-full rounded-2xl bg-black text-white px-4 py-3 text-xs font-bold uppercase tracking-widest"
+                  >
+                    Entrar ou criar conta
+                  </button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+
         <div className="transition-opacity duration-300 ease-in-out">
           {visaoAtual === 'home' && (
             <>
-              <section className="relative h-[70vh] bg-zinc-900 flex items-center justify-center text-center text-white px-6">
+              <section className="relative h-[52vh] sm:h-[60vh] md:h-[70vh] bg-zinc-900 flex items-center justify-center text-center text-white px-4 sm:px-6">
                 <div className="max-w-2xl space-y-4 animate-slideUpFade">
-                  <h2 className="text-4xl md:text-6xl font-black tracking-tight uppercase">Performance & Estilo</h2>
+                  <h2 className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tight uppercase">Performance & Estilo</h2>
                 </div>
               </section>
 
-              <main id="catalogo" className="max-w-7xl mx-auto px-6 py-20">
+              <main id="catalogo" className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-20">
                 <div className="flex flex-col gap-6 mb-12 border-b border-zinc-100 pb-6">
                   <h3 className="text-sm font-bold tracking-[0.2em] uppercase">Catálogo</h3>
                   <div className="flex flex-wrap gap-2">
@@ -739,7 +840,7 @@ export default function Loja() {
                 {produtosFiltrados.length === 0 ? (
                   <div className="text-center py-20 text-zinc-400 text-xs tracking-widest uppercase animate-fadeIn">Nenhum produto encontrado.</div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-12">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-8 sm:gap-y-12">
                     {produtosFiltrados.map((produto) => (
                       <CardProduto key={produto.id} produto={produto} onAbrir={abrirProduto} />
                     ))}
@@ -750,16 +851,16 @@ export default function Loja() {
           )}
 
           {visaoAtual === 'produto' && produtoSelecionado && (
-            <div className="max-w-7xl mx-auto px-6 py-12 animate-slideUpFade">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 animate-slideUpFade">
               <button onClick={() => setVisaoAtual('home')} className="mb-8 text-xs font-bold uppercase tracking-wider text-zinc-500 hover:text-black flex items-center gap-2 transition-colors">← Voltar</button>
 
-              <div className="flex flex-col md:flex-row gap-12">
+              <div className="flex flex-col md:flex-row gap-8 md:gap-12">
                 <div className="md:w-1/2 flex flex-col gap-4">
                   <div className="aspect-[3/4] bg-zinc-100 rounded-lg overflow-hidden border">
                     <img src={imagensModal[indiceImagemModal]?.url} alt={produtoSelecionado.nome} className="w-full h-full object-cover animate-fadeIn" />
                   </div>
                   {imagensModal.length > 1 && (
-                    <div className="flex gap-3 overflow-x-auto pb-2">
+                      <div className="flex gap-2 sm:gap-3 overflow-x-auto pb-2">
                       {imagensModal.map((img, idx) => (
                         <button key={idx} onClick={() => setIndiceImagemModal(idx)} className={`w-20 aspect-[3/4] rounded border-2 overflow-hidden flex-shrink-0 transition-colors ${indiceImagemModal === idx ? "border-black" : "border-transparent opacity-60 hover:opacity-100"}`}>
                           <img src={img.url} alt="" className="w-full h-full object-cover" />
@@ -773,8 +874,8 @@ export default function Loja() {
                   <div className="space-y-6">
                     <div>
                       <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mb-1">{produtoSelecionado.categoria}</p>
-                      <h3 className="text-3xl font-black uppercase tracking-wider">{produtoSelecionado.nome}</h3>
-                      <p className="text-2xl font-bold text-zinc-900 mt-2">R$ {Number(produtoSelecionado.preco).toFixed(2).replace('.', ',')}</p>
+                      <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-wider">{produtoSelecionado.nome}</h3>
+                      <p className="text-xl sm:text-2xl font-bold text-zinc-900 mt-2">R$ {Number(produtoSelecionado.preco).toFixed(2).replace('.', ',')}</p>
                     </div>
 
                     <div>
@@ -788,7 +889,7 @@ export default function Loja() {
 
                     <div className="border-t border-b border-zinc-100 py-6 my-6">
                       <label className={labelClasses}>Calcular Frete</label>
-                      <div className="flex gap-2 max-w-sm">
+                       <div className="flex flex-col sm:flex-row gap-2 max-w-sm">
                         <input type="text" placeholder="00000-000" value={cep} onChange={(e) => setCep(e.target.value)} className={inputClasses} />
                         <button type="button" onClick={calcularFrete} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
                       </div>
@@ -818,10 +919,10 @@ export default function Loja() {
           )}
 
           {visaoAtual === 'carrinho' && (
-            <div className="max-w-5xl mx-auto px-6 py-12 animate-slideUpFade">
-              <div className="flex justify-between items-center mb-8 border-b border-zinc-100 pb-4">
-                <h2 className="text-2xl font-black uppercase tracking-wider">{etapaSacola === "carrinho" ? "Sua Sacola" : etapaSacola === "checkout" ? "Finalizar Pedido" : "Sucesso!"}</h2>
-                <button onClick={() => setVisaoAtual('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors">Continuar Comprando</button>
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 animate-slideUpFade">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-8 border-b border-zinc-100 pb-4">
+                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-wider">{etapaSacola === "carrinho" ? "Sua Sacola" : etapaSacola === "checkout" ? "Finalizar Pedido" : "Sucesso!"}</h2>
+                <button onClick={() => setVisaoAtual('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors text-left sm:text-right">Continuar Comprando</button>
               </div>
 
               {numeroPedido ? (
@@ -840,29 +941,29 @@ export default function Loja() {
                   <div className="lg:col-span-2 space-y-6">
                     {etapaSacola === "carrinho" ? (
                       carrinho.map(item => (
-                        <div key={item.cartId} className="flex gap-4 border border-zinc-100 p-4 rounded-lg items-center shadow-sm animate-fadeIn">
-                          <img src={item.imgUrl} alt={item.nome} className="w-20 h-24 object-cover rounded bg-zinc-100" />
-                          <div className="flex-1">
+                        <div key={item.cartId} className="flex flex-col sm:flex-row gap-4 border border-zinc-100 p-4 rounded-lg items-start sm:items-center shadow-sm animate-fadeIn">
+                          <img src={item.imgUrl} alt={item.nome} className="w-full sm:w-20 h-48 sm:h-24 object-cover rounded bg-zinc-100" />
+                          <div className="flex-1 w-full">
                             <h4 className="text-sm font-bold uppercase">{item.nome}</h4>
                             <p className="text-xs text-zinc-500 uppercase mt-1">Tamanho: {item.tamanhoEscolhido}</p>
                             <p className="text-sm font-black mt-2">R$ {(item.preco * item.quantidade).toFixed(2).replace('.', ',')}</p>
                           </div>
-                          <button onClick={() => removerDoCarrinho(item.cartId)} className="text-xs text-red-500 font-bold uppercase hover:underline transition-all">Remover</button>
+                          <button onClick={() => removerDoCarrinho(item.cartId)} className="text-xs text-red-500 font-bold uppercase hover:underline transition-all self-end sm:self-auto">Remover</button>
                         </div>
                       ))
                     ) : (
                       <form id="form-checkout" onSubmit={finalizarPedido} className="border border-zinc-100 p-6 rounded-lg shadow-sm space-y-4 animate-slideUpFade">
                         <h3 className="font-bold uppercase border-b pb-2 mb-4">Dados de Entrega</h3>
                         <div><label className={labelClasses}>Nome Completo</label><input required value={dadosEntrega.nome} onChange={handleChangeEntrega("nome")} className={inputClasses} /></div>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div><label className={labelClasses}>E-mail</label><input type="email" required value={dadosEntrega.email} onChange={handleChangeEntrega("email")} className={inputClasses} /></div>
                           <div><label className={labelClasses}>Telefone</label><input required value={dadosEntrega.telefone} onChange={handleChangeEntrega("telefone")} className={inputClasses} /></div>
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="col-span-2"><label className={labelClasses}>Rua / Endereço</label><input required value={dadosEntrega.rua} onChange={handleChangeEntrega("rua")} className={inputClasses} /></div>
                           <div><label className={labelClasses}>Número</label><input required value={dadosEntrega.numero} onChange={handleChangeEntrega("numero")} className={inputClasses} /></div>
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div><label className={labelClasses}>Bairro</label><input required value={dadosEntrega.bairro} onChange={handleChangeEntrega("bairro")} className={inputClasses} /></div>
                           <div><label className={labelClasses}>Cidade</label><input required value={dadosEntrega.cidade} onChange={handleChangeEntrega("cidade")} className={inputClasses} /></div>
                           <div><label className={labelClasses}>Estado (UF)</label><input required value={dadosEntrega.estado} onChange={handleChangeEntrega("estado")} className={inputClasses} /></div>
@@ -929,10 +1030,10 @@ export default function Loja() {
           )}
 
           {visaoAtual === 'conta' && (
-            <div className="max-w-6xl mx-auto px-6 py-12 animate-slideUpFade">
-              <div className="flex justify-between items-center mb-8 border-b border-zinc-100 pb-4">
-                <h2 className="text-2xl font-black uppercase tracking-wider">Minha Conta</h2>
-                <button onClick={() => setVisaoAtual('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors">Voltar</button>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 animate-slideUpFade">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-8 border-b border-zinc-100 pb-4">
+                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-wider">Minha Conta</h2>
+                <button onClick={() => navegarParaVisao('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors text-left sm:text-right">Voltar</button>
               </div>
 
               {avisoConta && (
@@ -949,7 +1050,65 @@ export default function Loja() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
+              <div className="grid grid-cols-1 xl:grid-cols-[280px_minmax(0,1fr)] gap-6 xl:items-start">
+                <aside className="space-y-4 xl:sticky xl:top-28">
+                  <div className="rounded-3xl border border-zinc-200 bg-zinc-50 p-6 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <span className="w-12 h-12 rounded-full bg-black text-white text-sm font-bold flex items-center justify-center">
+                        {(usuarioLogado?.nome || usuarioLogado?.email || "?").charAt(0).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-zinc-900 truncate">{usuarioLogado?.nome || 'Cliente Boo'}</p>
+                        <p className="text-xs text-zinc-500 truncate">{usuarioLogado?.email}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 space-y-3">
+                      <button
+                        onClick={() => abrirMeusPedidos()}
+                        className="w-full flex items-center justify-between rounded-2xl bg-white border border-zinc-200 px-4 py-3 text-left hover:border-black transition-colors"
+                      >
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wider text-zinc-900">Acompanhar pedidos</p>
+                          <p className="text-[11px] text-zinc-500 mt-1">Detalhes, status e entrega.</p>
+                        </div>
+                        <FiChevronRight className="text-zinc-400" />
+                      </button>
+
+                      {isAdmin && (
+                        <button
+                          onClick={() => { window.open('/admin', '_blank', 'noopener,noreferrer'); }}
+                          className="w-full flex items-center justify-between rounded-2xl bg-black text-white px-4 py-3 text-left hover:bg-zinc-800 transition-colors"
+                        >
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wider">Gerenciador</p>
+                            <p className="text-[11px] text-zinc-300 mt-1">Abrir painel administrativo.</p>
+                          </div>
+                          <FiShield />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-zinc-200 bg-white p-6 shadow-sm">
+                    <p className="text-sm font-black uppercase tracking-wider">Status da Conta</p>
+                    <div className="mt-4 space-y-3 text-xs text-zinc-600">
+                      <div className="flex items-center justify-between">
+                        <span className="uppercase font-bold text-zinc-500">Cadastro</span>
+                        <span className="font-bold">{contaCompleta ? 'Completo' : 'Pendente'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="uppercase font-bold text-zinc-500">Pedidos</span>
+                        <span className="font-bold">{totalPedidosCliente}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="uppercase font-bold text-zinc-500">WhatsApp</span>
+                        <span className="font-bold">{dadosConta.preferenciasConta.statusPedidoWhatsApp ? 'Ativar backend' : 'Desligado'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </aside>
+
                 <div className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <button
@@ -979,7 +1138,7 @@ export default function Loja() {
                     </div>
                   </div>
 
-                  <form onSubmit={salvarMinhaConta} className="border border-zinc-100 p-6 rounded-2xl shadow-sm space-y-4 bg-white">
+                  <form onSubmit={salvarMinhaConta} className="border border-zinc-100 p-5 sm:p-6 rounded-3xl shadow-sm space-y-4 bg-white">
                     <div className="flex items-center justify-between gap-4 border-b border-zinc-100 pb-4">
                       <div>
                         <p className="text-sm font-black uppercase tracking-wider">Seus Dados</p>
@@ -1142,73 +1301,15 @@ export default function Loja() {
                 </button>
                   </form>
                 </div>
-
-                <div className="space-y-6">
-                  <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <span className="w-12 h-12 rounded-full bg-black text-white text-sm font-bold flex items-center justify-center">
-                        {(usuarioLogado?.nome || usuarioLogado?.email || "?").charAt(0).toUpperCase()}
-                      </span>
-                      <div>
-                        <p className="text-sm font-bold text-zinc-900">{usuarioLogado?.nome || 'Cliente Boo'}</p>
-                        <p className="text-xs text-zinc-500">{usuarioLogado?.email}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 space-y-3">
-                      <button
-                        onClick={() => abrirMeusPedidos()}
-                        className="w-full flex items-center justify-between rounded-xl bg-white border border-zinc-200 px-4 py-3 text-left hover:border-black transition-colors"
-                      >
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-wider text-zinc-900">Acompanhar pedidos</p>
-                          <p className="text-[11px] text-zinc-500 mt-1">Detalhes, status e entrega.</p>
-                        </div>
-                        <FiChevronRight className="text-zinc-400" />
-                      </button>
-
-                      {isAdmin && (
-                        <button
-                          onClick={() => { window.open('/admin', '_blank', 'noopener,noreferrer'); }}
-                          className="w-full flex items-center justify-between rounded-xl bg-black text-white px-4 py-3 text-left hover:bg-zinc-800 transition-colors"
-                        >
-                          <div>
-                            <p className="text-xs font-bold uppercase tracking-wider">Gerenciador</p>
-                            <p className="text-[11px] text-zinc-300 mt-1">Abrir painel administrativo.</p>
-                          </div>
-                          <FiShield />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-                    <p className="text-sm font-black uppercase tracking-wider">Status da Conta</p>
-                    <div className="mt-4 space-y-3 text-xs text-zinc-600">
-                      <div className="flex items-center justify-between">
-                        <span className="uppercase font-bold text-zinc-500">Cadastro</span>
-                        <span className="font-bold">{contaCompleta ? 'Completo' : 'Pendente'}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="uppercase font-bold text-zinc-500">Pedidos</span>
-                        <span className="font-bold">{totalPedidosCliente}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="uppercase font-bold text-zinc-500">WhatsApp</span>
-                        <span className="font-bold">{dadosConta.preferenciasConta.statusPedidoWhatsApp ? 'Ativar backend' : 'Desligado'}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           )}
 
           {visaoAtual === 'pedidos' && (
-            <div className="max-w-3xl mx-auto px-6 py-12 animate-slideUpFade">
-              <div className="flex justify-between items-center mb-8 border-b border-zinc-100 pb-4">
-                <h2 className="text-2xl font-black uppercase tracking-wider">Meus Pedidos</h2>
-                <button onClick={() => setVisaoAtual('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors">Voltar</button>
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 animate-slideUpFade">
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-8 border-b border-zinc-100 pb-4">
+                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-wider">Meus Pedidos</h2>
+                <button onClick={() => navegarParaVisao('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors text-left sm:text-right">Voltar</button>
               </div>
 
               {carregandoPedidos ? (
@@ -1310,7 +1411,26 @@ export default function Loja() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn"
           onClick={(e) => e.target === e.currentTarget && setIsLoginAberto(false)}
         >
-          <div className="bg-white w-full max-w-sm rounded-lg shadow-2xl p-8 relative animate-slideUpFade">
+          <AuthCard
+            isRegister={isRegistro}
+            onToggleMode={() => {
+              setIsRegistro(!isRegistro);
+              setErroLogin(null);
+              setNomeRegistro('');
+            }}
+            onSubmit={handleAuth}
+            loading={carregandoLogin}
+            error={erroLogin}
+            name={nomeRegistro}
+            email={emailLogin}
+            password={senhaLogin}
+            onNameChange={setNomeRegistro}
+            onEmailChange={setEmailLogin}
+            onPasswordChange={setSenhaLogin}
+            onClose={() => setIsLoginAberto(false)}
+            compact
+          />
+          <div className="hidden bg-white w-full max-w-sm rounded-lg shadow-2xl p-8 relative animate-slideUpFade">
             <button onClick={() => setIsLoginAberto(false)} className="absolute top-4 right-4 w-8 h-8 bg-zinc-100 rounded-full flex items-center justify-center text-zinc-600 hover:bg-zinc-200 transition-colors">
               <FiX className="text-xs" />
             </button>

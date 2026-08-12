@@ -1,7 +1,7 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import Loja from './pages/Loja';
 import Admin from './pages/Admin';
-import Login from './pages/Login'; // Tem que ser import Login, e não import Admin!
+import Login from './pages/Login';
 
 export default function App() {
   return (
@@ -9,9 +9,8 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Loja />} />
         <Route path="/admin" element={<Admin />} />
-        
-        {/* É ESTA LINHA AQUI QUE ESTAVA FALTANDO 👇 */}
-        <Route path="/login" element={<Login />} /> 
+        <Route path="/login" element={<Login />} />
+        <Route path="/registro" element={<Login initialMode="register" />} />
       </Routes>
     </BrowserRouter>
   );
