@@ -878,7 +878,6 @@ const handleFileUpload = async (e) => {
             <div>
               <div className="flex items-center justify-between pb-5 border-b border-zinc-100">
                 <div>
-                  <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-400 font-bold">BOO</p>
                   <h2 className="text-base uppercase tracking-[0.05em]"><span className="font-light text-zinc-400">BOO</span><span className="font-bold text-black">ADMIN</span></h2>
                 </div>
                 <button
@@ -1146,21 +1145,21 @@ const handleFileUpload = async (e) => {
                 </div>
 
                 {/* TABELA DE PRODUTOS COM ALERTAS DE ESTOQUE */}
-                <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-hidden">
-                  <table className="w-full text-left border-collapse">
+                <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-x-auto">
+                  <table className="w-full min-w-[720px] text-left border-collapse">
                     <thead>
                       <tr className="border-b border-zinc-100 text-[11px] text-zinc-400 uppercase tracking-widest bg-zinc-50/50">
-                        <th className="px-6 py-4 font-semibold">Produto</th>
-                        <th className="px-6 py-4 font-semibold">Categoria</th>
-                        <th className="px-6 py-4 font-semibold">Preço</th>
-                        <th className="px-6 py-4 font-semibold">Estoque</th>
-                        <th className="px-6 py-4 font-semibold text-right">Ações</th>
+                        <th className="px-4 py-3 sm:px-6 sm:py-4 font-semibold">Produto</th>
+                        <th className="px-4 py-3 sm:px-6 sm:py-4 font-semibold">Categoria</th>
+                        <th className="px-4 py-3 sm:px-6 sm:py-4 font-semibold">Preço</th>
+                        <th className="px-4 py-3 sm:px-6 sm:py-4 font-semibold">Estoque</th>
+                        <th className="px-4 py-3 sm:px-6 sm:py-4 font-semibold text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-100 text-sm">
                       {produtosAtuais.length === 0 ? (
                         <tr>
-                          <td colSpan="5" className="px-6 py-12 text-center text-zinc-400 text-xs uppercase tracking-wider">
+                          <td colSpan="5" className="px-4 py-10 sm:px-6 sm:py-12 text-center text-zinc-400 text-xs uppercase tracking-wider">
                             Nenhum produto encontrado.
                           </td>
                         </tr>
@@ -1169,15 +1168,15 @@ const handleFileUpload = async (e) => {
                           const QtdEstoque = parseInt(produto.estoque || 0, 10);
                           return (
                             <tr key={produto.id} className="hover:bg-zinc-50/50 transition-colors">
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-4">
-                                  <img src={produto.imagens?.[0]?.url || produto.imgUrl} alt={produto.nome} className="w-10 h-12 object-cover rounded-md bg-zinc-100 border border-zinc-200" />
-                                  <span className="font-medium text-zinc-800 text-sm">{produto.nome || "Produto sem nome"}</span>
+                              <td className="px-4 py-3 sm:px-6 sm:py-4">
+                                <div className="flex items-center gap-3">
+                                  <img src={produto.imagens?.[0]?.url || produto.imgUrl} alt={produto.nome} className="w-9 h-11 object-cover rounded-md bg-zinc-100 border border-zinc-200" />
+                                  <span className="font-medium text-zinc-800 text-xs sm:text-sm">{produto.nome || "Produto sem nome"}</span>
                                 </div>
                               </td>
-                              <td className="px-6 py-4 text-zinc-500 text-xs uppercase tracking-wider">{produto.categoria || "Geral"}</td>
-                              <td className="px-6 py-4 text-zinc-600 text-sm">R$ {produto.preco}</td>
-                              <td className="px-6 py-4 text-sm">
+                              <td className="px-4 py-3 sm:px-6 sm:py-4 text-zinc-500 text-[11px] sm:text-xs uppercase tracking-wider">{produto.categoria || "Geral"}</td>
+                              <td className="px-4 py-3 sm:px-6 sm:py-4 text-zinc-600 text-xs sm:text-sm">R$ {produto.preco}</td>
+                              <td className="px-4 py-3 sm:px-6 sm:py-4 text-xs sm:text-sm">
                                 {QtdEstoque === 0 ? (
                                   <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-[10px] font-semibold uppercase tracking-wider">Esgotado</span>
                                 ) : QtdEstoque < 5 ? (
@@ -1186,9 +1185,9 @@ const handleFileUpload = async (e) => {
                                   <span className="text-zinc-600">{QtdEstoque} un.</span>
                                 )}
                               </td>
-                              <td className="px-6 py-4 text-right space-x-4">
-                                <button onClick={() => setProdutoEditando({ ...produto })} className="text-black font-semibold hover:underline text-xs tracking-wider uppercase cursor-pointer">Editar</button>
-                                <button onClick={() => setProdutoParaExcluir(produto)} className="text-red-500 font-semibold hover:underline text-xs tracking-wider uppercase cursor-pointer">Excluir</button>
+                              <td className="px-4 py-3 sm:px-6 sm:py-4 text-right space-x-3">
+                                <button onClick={() => setProdutoEditando({ ...produto })} className="text-black font-semibold hover:underline text-[11px] sm:text-xs tracking-wider uppercase cursor-pointer">Editar</button>
+                                <button onClick={() => setProdutoParaExcluir(produto)} className="text-red-500 font-semibold hover:underline text-[11px] sm:text-xs tracking-wider uppercase cursor-pointer">Excluir</button>
                               </td>
                             </tr>
                           );
@@ -1625,8 +1624,8 @@ const handleFileUpload = async (e) => {
                       <th className="px-4 py-3 font-medium">Nome</th>
                       <th className="px-4 py-3 font-medium">E-mail</th>
                       <th className="px-4 py-3 font-medium">Cadastrado em</th>
-                      <th className="px-6 py-3 font-medium">Permissão</th>
-                      <th className="px-6 py-3 font-medium text-right">Ações</th>
+                      <th className="px-4 py-3 font-medium">Permissão</th>
+                      <th className="px-4 py-3 font-medium text-right">Ações</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -724,12 +724,12 @@ export default function Loja() {
                 onClick={() => navegarParaVisao('home')}
                 src={logo}
                 alt="BOO Sportswear"
-                className="h-7 sm:h-9 w-auto cursor-pointer select-none"
+                className="h-[22px] sm:h-9 w-auto cursor-pointer select-none"
               />
             </div>
 
-            <div className="md:hidden flex justify-center">
-              <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.28em] text-zinc-900 whitespace-nowrap">
+            <div className="md:hidden flex justify-center justify-self-center text-center">
+              <span className="font-serif text-[10px] sm:text-xs font-semibold uppercase tracking-[0.28em] text-zinc-900 whitespace-nowrap">
                 BOO SPORTWEAR
               </span>
             </div>
@@ -816,7 +816,7 @@ export default function Loja() {
                           }}
                           className="w-full text-left px-4 py-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-black uppercase tracking-wider transition-colors"
                         >
-                          Ir para o Gerenciador
+                          Painel Administrativo
                         </button>
                       )}
                       <button 
@@ -856,7 +856,7 @@ export default function Loja() {
                 </button>
               </div>
               <div className="px-4 py-4 space-y-4 overflow-y-auto h-[calc(100%-73px)]">
-                <div className="flex items-center gap-2 rounded-2xl border border-zinc-200 px-3 py-2">
+                <div className="flex items-center gap-2 px-1 py-1">
                   <FiSearch className="text-sm text-zinc-400" />
                   <input
                     type="text"
@@ -873,7 +873,7 @@ export default function Loja() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => navegarParaVisao('home')}
-                    className="rounded-2xl border border-zinc-200 px-4 py-3 text-left"
+                    className="px-2 py-2 text-left"
                   >
                     <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Navegação</p>
                     <p className="text-sm font-semibold text-zinc-900 mt-2">Início</p>
@@ -883,14 +883,14 @@ export default function Loja() {
                       navegarParaVisao('carrinho');
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    className="rounded-2xl border border-zinc-200 px-4 py-3 text-left"
+                    className="px-2 py-2 text-left"
                   >
                     <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-400">Sacola</p>
                     <p className="text-sm font-semibold text-zinc-900 mt-2">Ver carrinho</p>
                   </button>
                 </div>
 
-                <div className="rounded-2xl border border-zinc-200 overflow-hidden">
+                <div className="overflow-hidden">
                   <button
                     onClick={async () => {
                       if (!usuarioLogado) {
@@ -925,7 +925,7 @@ export default function Loja() {
                       }}
                       className="w-full px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 transition-colors border-t border-zinc-100"
                     >
-                      Ir para o Gerenciador
+                      Painel Administrativo
                     </button>
                   )}
                 </div>
