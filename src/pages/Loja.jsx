@@ -81,6 +81,7 @@ export default function Loja() {
   const [categoriaAtiva, setCategoriaAtiva] = useState("Todos");
   const [termoBusca, setTermoBusca] = useState("");
   const [isBuscaAberta, setIsBuscaAberta] = useState(false);
+  const [isSugestoesBuscaAberta, setIsSugestoesBuscaAberta] = useState(false);
 
   // Menu mobile e Menu do Usuário
   const [isMenuAberto, setIsMenuAberto] = useState(false);
@@ -196,6 +197,91 @@ export default function Loja() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  useEffect(() => {
+    const tituloOriginal = 'BOO SPORTWEAR';
+    const mensagens = [
+      'Seu look Boo te espera',
+      'As novidades chegaram',
+      'Volte para finalizar sua compra',
+    ];
+
+    let indiceMensagem = 0;
+    let intervalId = null;
+
+    const trocarTitulo = () => {
+      document.title = mensagens[indiceMensagem];
+      indiceMensagem = (indiceMensagem + 1) % mensagens.length;
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        trocarTitulo();
+        intervalId = window.setInterval(trocarTitulo, 1400);
+        return;
+      }
+
+      if (intervalId) {
+        window.clearInterval(intervalId);
+        intervalId = null;
+      }
+      document.title = tituloOriginal;
+    };
+
+    document.title = tituloOriginal;
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.title = tituloOriginal;
+    };
+  }, []);
+
+  useEffect(() => {
+    const quantidadeCarrinho = carrinho.reduce((acc, item) => acc + Number(item.quantidade || 0), 0);
+    const favicon = document.querySelector("link[rel='icon']") || document.querySelector("link[rel='shortcut icon']");
+    if (!favicon) return;
+
+    if (quantidadeCarrinho <= 0) {
+      favicon.setAttribute('href', logo);
+      return;
+    }
+
+    const img = new Image();
+    img.src = logo;
+
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.clearRect(0, 0, 64, 64);
+      ctx.drawImage(img, 0, 0, 64, 64);
+
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(49, 15, 12, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+
+      const quantidadeLabel = quantidadeCarrinho > 9 ? '9+' : String(quantidadeCarrinho);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(quantidadeLabel, 49, 15);
+
+      favicon.setAttribute('href', canvas.toDataURL('image/png'));
+    };
+  }, [carrinho]);
+
   const navegarParaVisao = (proximaVisao, { replace = false, produtoId = null, produtoNome = "" } = {}) => {
     const rotaHash = {
       home: '',
@@ -268,6 +354,19 @@ export default function Loja() {
     return [...new Set(produtosBrazilian.map(p => p.categoria).filter(Boolean))];
   }, [produtosBrazilian]);
 
+  const sugestoesBusca = useMemo(() => {
+    const termoNormalizado = termoBusca.trim().toLowerCase();
+    if (!termoNormalizado) return [];
+
+    return produtosBrazilian
+      .filter((produto) => {
+        const nome = (produto.nome || "").toLowerCase();
+        const categoria = (produto.categoria || "").toLowerCase();
+        return nome.includes(termoNormalizado) || categoria.includes(termoNormalizado);
+      })
+      .slice(0, 6);
+  }, [produtosBrazilian, termoBusca]);
+
   const produtosFiltrados = useMemo(() => {
     return produtosBrazilian.filter(produto => {
       const passaCategoria = categoriaAtiva === "Todos" || produto.categoria === categoriaAtiva;
@@ -275,6 +374,14 @@ export default function Loja() {
       return passaCategoria && passaBusca;
     });
   }, [produtosBrazilian, categoriaAtiva, termoBusca]);
+
+  const selecionarSugestaoBusca = (produto) => {
+    setTermoBusca(produto.nome || "");
+    setIsSugestoesBuscaAberta(false);
+    setIsBuscaAberta(false);
+    setCategoriaAtiva("Todos");
+    abrirProduto(produto);
+  };
 
   const produtosRelacionados = useMemo(() => {
     if (!produtoSelecionado) return [];
@@ -735,21 +842,52 @@ export default function Loja() {
             </div>
 
             <div className="flex items-center justify-end gap-4 sm:gap-5">
-              <div className="hidden sm:flex items-center">
+              <div className="hidden sm:flex items-center relative">
                 {isBuscaAberta ? (
-                  <input
-                    autoFocus
-                    type="text"
-                    value={termoBusca}
-                    onChange={(e) => {
-                      setTermoBusca(e.target.value);
-                      if (visaoAtual !== 'home') setVisaoAtual('home');
-                      if (e.target.value.length > 0) document.getElementById("catalogo")?.scrollIntoView({ behavior: "smooth" });
-                    }}
-                    onBlur={() => { if (!termoBusca) setIsBuscaAberta(false); }}
-                    placeholder="Buscar..."
-                    className="border-b border-zinc-300 focus:border-black text-xs py-1 w-40 focus:outline-none transition-colors"
-                  />
+                  <>
+                    <input
+                      autoFocus
+                      type="text"
+                      value={termoBusca}
+                      onFocus={() => setIsSugestoesBuscaAberta(true)}
+                      onChange={(e) => {
+                        setTermoBusca(e.target.value);
+                        setIsSugestoesBuscaAberta(true);
+                        if (visaoAtual !== 'home') setVisaoAtual('home');
+                        if (e.target.value.length > 0) document.getElementById("catalogo")?.scrollIntoView({ behavior: "smooth" });
+                      }}
+                      onBlur={() => {
+                        window.setTimeout(() => {
+                          if (!termoBusca) setIsBuscaAberta(false);
+                          setIsSugestoesBuscaAberta(false);
+                        }, 120);
+                      }}
+                      placeholder="Buscar..."
+                      className="border-b border-zinc-300 focus:border-black text-xs py-1 w-48 focus:outline-none transition-colors"
+                    />
+                    {isSugestoesBuscaAberta && sugestoesBusca.length > 0 && (
+                      <div className="absolute right-0 top-8 w-72 rounded-2xl border border-zinc-200 bg-white shadow-xl overflow-hidden z-50">
+                        {sugestoesBusca.map((produto) => (
+                          <button
+                            key={produto.id}
+                            type="button"
+                            onMouseDown={() => selecionarSugestaoBusca(produto)}
+                            className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-zinc-50 transition-colors"
+                          >
+                            <img
+                              src={produto.imagens?.[0]?.url || produto.imgUrl}
+                              alt={produto.nome}
+                              className="w-10 h-12 rounded-md object-cover bg-zinc-100"
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-xs font-semibold text-zinc-900 truncate">{produto.nome}</span>
+                              <span className="block text-[10px] uppercase tracking-wider text-zinc-400 mt-1">{produto.categoria || 'Loja'}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <button onClick={() => setIsBuscaAberta(true)} className="cursor-pointer hover:opacity-75 transition-opacity">
                     <FiSearch className="text-base" />
@@ -856,18 +994,50 @@ export default function Loja() {
                 </button>
               </div>
               <div className="px-4 py-4 space-y-4 overflow-y-auto h-[calc(100%-73px)]">
-                <div className="flex items-center gap-2 px-1 py-1">
-                  <FiSearch className="text-sm text-zinc-400" />
-                  <input
-                    type="text"
-                    value={termoBusca}
-                    onChange={(e) => {
-                      setTermoBusca(e.target.value);
-                      if (visaoAtual !== 'home') navegarParaVisao('home');
-                    }}
-                    placeholder="Buscar produto..."
-                    className="w-full bg-transparent text-sm focus:outline-none"
-                  />
+                <div className="relative">
+                  <div className="flex items-center gap-2 px-1 py-1">
+                    <FiSearch className="text-sm text-zinc-400" />
+                    <input
+                      type="text"
+                      value={termoBusca}
+                      onFocus={() => setIsSugestoesBuscaAberta(true)}
+                      onChange={(e) => {
+                        setTermoBusca(e.target.value);
+                        setIsSugestoesBuscaAberta(true);
+                        if (visaoAtual !== 'home') navegarParaVisao('home');
+                      }}
+                      onBlur={() => {
+                        window.setTimeout(() => setIsSugestoesBuscaAberta(false), 120);
+                      }}
+                      placeholder="Buscar produto..."
+                      className="w-full bg-transparent text-sm focus:outline-none"
+                    />
+                  </div>
+                  {isSugestoesBuscaAberta && sugestoesBusca.length > 0 && (
+                    <div className="mt-3 rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
+                      {sugestoesBusca.map((produto) => (
+                        <button
+                          key={produto.id}
+                          type="button"
+                          onMouseDown={() => {
+                            setIsMenuAberto(false);
+                            selecionarSugestaoBusca(produto);
+                          }}
+                          className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-zinc-50 transition-colors"
+                        >
+                          <img
+                            src={produto.imagens?.[0]?.url || produto.imgUrl}
+                            alt={produto.nome}
+                            className="w-10 h-12 rounded-md object-cover bg-zinc-100"
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-xs font-semibold text-zinc-900 truncate">{produto.nome}</span>
+                            <span className="block text-[10px] uppercase tracking-wider text-zinc-400 mt-1">{produto.categoria || 'Loja'}</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">

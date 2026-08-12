@@ -35,12 +35,15 @@ export default function Admin() {
   // Busca e Filtros da Tabela
   const [termoBusca, setTermoBusca] = useState("");
   const [filtroCategoria, setFiltroCategoria] = useState("Todas");
+  const [filtroEstoqueProduto, setFiltroEstoqueProduto] = useState("Todos");
+  const [ordenacaoProdutos, setOrdenacaoProdutos] = useState("recentes");
+  const [menuProdutoAberto, setMenuProdutoAberto] = useState(null);
 
   // Paginação
   const [paginaAtual, setPaginaAtual] = useState(1);
   const itensPorPagina = 8;
 
-  // Abas: 'home', 'produtos', 'pedidos', 'categorias', 'usuarios', 'cupons' ou 'configuracoes'
+  // Abas: 'home', 'produtos', 'pedidos', 'categorias', 'usuarios', 'cupons', 'configuracoes' ou 'logs'
   const [abaAtiva, setAbaAtiva] = useState('home');
 
   // Pedidos
@@ -48,6 +51,7 @@ export default function Admin() {
   const [carregandoPedidos, setCarregandoPedidos] = useState(true);
   const [pedidoSelecionado, setPedidoSelecionado] = useState(null);
   const [filtroStatusPedido, setFiltroStatusPedido] = useState("Todos");
+  const [termoBuscaPedido, setTermoBuscaPedido] = useState("");
 
   const STATUS_PEDIDO = [
     { valor: "pendente", label: "Pendente", cor: "bg-amber-100 text-amber-700" },
@@ -67,8 +71,10 @@ export default function Admin() {
   const [usuarios, setUsuarios] = useState([]);
   const [carregandoUsuarios, setCarregandoUsuarios] = useState(true);
   const [termoBuscaUsuario, setTermoBuscaUsuario] = useState("");
+  const [ordenacaoUsuarios, setOrdenacaoUsuarios] = useState("recentes");
   const [usuarioParaAlterarRole, setUsuarioParaAlterarRole] = useState(null);
   const [menuUsuarioAberto, setMenuUsuarioAberto] = useState(null);
+  const [logsAcoes, setLogsAcoes] = useState([]);
 
   // Cupons
   const [cupons, setCupons] = useState([]);
@@ -103,6 +109,18 @@ const API_URL = "http://167.148.161.90/api";
 const dispararToast = (msg, tipo = "sucesso") => {
   setToast({ show: true, msg, tipo });
   setTimeout(() => setToast({ show: false, msg: "", tipo: "sucesso" }), 3500);
+};
+
+const registrarLogAcao = (nome, acao) => {
+  setLogsAcoes(prev => [
+    {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      nome,
+      acao,
+      dataHora: new Date().toISOString()
+    },
+    ...prev
+  ].slice(0, 50));
 };
 
   const normalizarInstagram = (valor) => {
@@ -691,12 +709,48 @@ const handleFileUpload = async (e) => {
     ? categorias.map(c => c.nome) 
     : ["Conjuntos"];
 
+  const alternarVisibilidadeProduto = (produtoId) => {
+    setProdutos(prev => prev.map(produto => (
+      produto.id === produtoId ? { ...produto, oculto: !produto.oculto } : produto
+    )));
+    const produtoAtualizado = produtos.find(produto => produto.id === produtoId);
+    if (produtoAtualizado) {
+      registrarLogAcao('Administração Boo', `${produtoAtualizado.oculto ? 'Reativou' : 'Ocultou'} o produto ${produtoAtualizado.nome}`);
+      dispararToast(produtoAtualizado.oculto ? "Produto visível novamente." : "Produto ocultado da vitrine.");
+    }
+    setMenuProdutoAberto(null);
+  };
+
+  const abrirEdicaoProduto = (produto) => {
+    setMenuProdutoAberto(null);
+    setProdutoEditando({ ...produto });
+  };
+
+  const abrirExclusaoProduto = (produto) => {
+    setMenuProdutoAberto(null);
+    setProdutoParaExcluir(produto);
+  };
+
   // Filtragem e Paginação
-  const produtosFiltrados = produtos.filter(produto => {
-    const bateNome = produto.nome.toLowerCase().includes(termoBusca.toLowerCase());
-    const bateCategoria = filtroCategoria === "Todas" || produto.categoria === filtroCategoria;
-    return bateNome && bateCategoria;
-  });
+  const produtosFiltrados = [...produtos]
+    .filter(produto => {
+      const bateNome = (produto.nome || "").toLowerCase().includes(termoBusca.toLowerCase());
+      const bateCategoria = filtroCategoria === "Todas" || produto.categoria === filtroCategoria;
+      const estoqueAtual = parseInt(produto.estoque || 0, 10);
+      const bateEstoque =
+        filtroEstoqueProduto === "Todos" ||
+        (filtroEstoqueProduto === "Ativos" && !produto.oculto) ||
+        (filtroEstoqueProduto === "Ocultos" && produto.oculto) ||
+        (filtroEstoqueProduto === "SemEstoque" && estoqueAtual === 0) ||
+        (filtroEstoqueProduto === "EstoqueBaixo" && estoqueAtual > 0 && estoqueAtual < 5);
+      return bateNome && bateCategoria && bateEstoque;
+    })
+    .sort((a, b) => {
+      if (ordenacaoProdutos === "nome-asc") return (a.nome || "").localeCompare(b.nome || "");
+      if (ordenacaoProdutos === "preco-desc") return Number(String(b.preco).replace(',', '.')) - Number(String(a.preco).replace(',', '.'));
+      if (ordenacaoProdutos === "estoque-desc") return Number(b.estoque || 0) - Number(a.estoque || 0);
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
 
   const indiceUltimoItem = paginaAtual * itensPorPagina;
   const indicePrimeiroItem = indiceUltimoItem - itensPorPagina;
@@ -708,9 +762,17 @@ const handleFileUpload = async (e) => {
   const produtosEstoqueBaixo = produtos.filter(p => parseInt(p.estoque || 0, 10) < 5).length;
 
   // Pedidos filtrados (aba Pedidos)
-  const pedidosFiltrados = pedidos.filter(p =>
-    filtroStatusPedido === "Todos" || p.status === filtroStatusPedido
-  ).sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm));
+  const pedidosFiltrados = pedidos.filter(p => {
+    const buscaPedido = termoBuscaPedido.toLowerCase();
+    const bateStatus = filtroStatusPedido === "Todos" || p.status === filtroStatusPedido;
+    const bateBusca =
+      !buscaPedido ||
+      String(p.numero || p.id || "").toLowerCase().includes(buscaPedido) ||
+      (p.cliente?.nome || "").toLowerCase().includes(buscaPedido) ||
+      (p.cliente?.email || "").toLowerCase().includes(buscaPedido) ||
+      (p.status || "").toLowerCase().includes(buscaPedido);
+    return bateStatus && bateBusca;
+  }).sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm));
 
   const statusInfo = (statusValor) =>
     STATUS_PEDIDO.find(s => s.valor === statusValor) || { label: statusValor || "—", cor: "bg-zinc-100 text-zinc-600" };
@@ -735,10 +797,16 @@ const handleFileUpload = async (e) => {
     .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm))
     .slice(0, 5);
 
-  const usuariosFiltrados = usuarios.filter(u =>
-    u.nome.toLowerCase().includes(termoBuscaUsuario.toLowerCase()) ||
-    u.email.toLowerCase().includes(termoBuscaUsuario.toLowerCase())
-  );
+  const usuariosFiltrados = [...usuarios]
+    .filter(u =>
+      (u.nome || "").toLowerCase().includes(termoBuscaUsuario.toLowerCase()) ||
+      (u.email || "").toLowerCase().includes(termoBuscaUsuario.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (ordenacaoUsuarios === "nome-asc") return (a.nome || "").localeCompare(b.nome || "");
+      if (ordenacaoUsuarios === "admin-first") return (b.role === 'ADMIN') - (a.role === 'ADMIN');
+      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+    });
 
   const abrirConfirmacaoRole = (usuario, roleDestino) => {
     setMenuUsuarioAberto(null);
@@ -836,6 +904,13 @@ const handleFileUpload = async (e) => {
             >
               <FiSettings className="text-base" />
               Configurações
+            </button>
+            <button 
+              onClick={() => { setAbaAtiva('logs'); setProdutoEditando(null); }} 
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium text-xs tracking-wider uppercase transition-colors cursor-pointer ${abaAtiva === 'logs' ? 'bg-black text-white' : 'text-zinc-600 hover:bg-zinc-100'}`}
+            >
+              <FiClock className="text-base" />
+              Logs
             </button>
           </nav>
         </div>
@@ -1118,7 +1193,7 @@ const handleFileUpload = async (e) => {
                 </div>
 
                 {/* BARRA DE BUSCA E FILTROS */}
-                <div className="flex flex-col sm:flex-row gap-4 justify-between bg-white p-4 rounded-xl border border-zinc-200 shadow-2xs">
+                <div className="flex flex-col xl:flex-row gap-4 justify-between bg-white p-4 rounded-xl border border-zinc-200 shadow-2xs">
                   <div className="relative flex-1">
                     <FiSearch className="absolute left-3.5 top-3.5 text-zinc-400 text-sm" />
                     <input 
@@ -1130,7 +1205,7 @@ const handleFileUpload = async (e) => {
                     />
                   </div>
 
-                  <div className="w-full sm:w-48">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full xl:w-auto">
                     <select 
                       value={filtroCategoria}
                       onChange={(e) => { setFiltroCategoria(e.target.value); setPaginaAtual(1); }}
@@ -1140,6 +1215,27 @@ const handleFileUpload = async (e) => {
                       {nomesCategorias.map((nome) => (
                         <option key={nome} value={nome}>{nome}</option>
                       ))}
+                    </select>
+                    <select
+                      value={filtroEstoqueProduto}
+                      onChange={(e) => { setFiltroEstoqueProduto(e.target.value); setPaginaAtual(1); }}
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="Todos">Todos</option>
+                      <option value="Ativos">Ativos</option>
+                      <option value="Ocultos">Ocultos</option>
+                      <option value="SemEstoque">Sem estoque</option>
+                      <option value="EstoqueBaixo">Estoque baixo</option>
+                    </select>
+                    <select
+                      value={ordenacaoProdutos}
+                      onChange={(e) => setOrdenacaoProdutos(e.target.value)}
+                      className="w-full bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="recentes">Mais recentes</option>
+                      <option value="nome-asc">Nome A-Z</option>
+                      <option value="preco-desc">Maior preço</option>
+                      <option value="estoque-desc">Maior estoque</option>
                     </select>
                   </div>
                 </div>
@@ -1171,7 +1267,14 @@ const handleFileUpload = async (e) => {
                               <td className="px-4 py-3 sm:px-6 sm:py-4">
                                 <div className="flex items-center gap-3">
                                   <img src={produto.imagens?.[0]?.url || produto.imgUrl} alt={produto.nome} className="w-9 h-11 object-cover rounded-md bg-zinc-100 border border-zinc-200" />
-                                  <span className="font-medium text-zinc-800 text-xs sm:text-sm">{produto.nome || "Produto sem nome"}</span>
+                                  <div>
+                                    <span className="font-medium text-zinc-800 text-xs sm:text-sm">{produto.nome || "Produto sem nome"}</span>
+                                    {produto.oculto && (
+                                      <span className="mt-1 inline-flex px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-500 text-[10px] font-bold uppercase tracking-wider">
+                                        Oculto
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </td>
                               <td className="px-4 py-3 sm:px-6 sm:py-4 text-zinc-500 text-[11px] sm:text-xs uppercase tracking-wider">{produto.categoria || "Geral"}</td>
@@ -1185,9 +1288,38 @@ const handleFileUpload = async (e) => {
                                   <span className="text-zinc-600">{QtdEstoque} un.</span>
                                 )}
                               </td>
-                              <td className="px-4 py-3 sm:px-6 sm:py-4 text-right space-x-3">
-                                <button onClick={() => setProdutoEditando({ ...produto })} className="text-black font-semibold hover:underline text-[11px] sm:text-xs tracking-wider uppercase cursor-pointer">Editar</button>
-                                <button onClick={() => setProdutoParaExcluir(produto)} className="text-red-500 font-semibold hover:underline text-[11px] sm:text-xs tracking-wider uppercase cursor-pointer">Excluir</button>
+                              <td className="px-4 py-3 sm:px-6 sm:py-4 text-right">
+                                <div className="relative inline-flex justify-end">
+                                  <button
+                                    onClick={() => setMenuProdutoAberto(menuProdutoAberto === produto.id ? null : produto.id)}
+                                    className="w-9 h-9 inline-flex items-center justify-center rounded-full hover:bg-zinc-100 text-zinc-500 hover:text-black transition-colors cursor-pointer"
+                                    aria-label={`Abrir ações de ${produto.nome}`}
+                                  >
+                                    <FiMoreVertical />
+                                  </button>
+                                  {menuProdutoAberto === produto.id && (
+                                    <div className="absolute right-0 top-11 z-20 w-52 rounded-xl border border-zinc-200 bg-white shadow-lg overflow-hidden">
+                                      <button
+                                        onClick={() => abrirEdicaoProduto(produto)}
+                                        className="w-full text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 cursor-pointer transition-colors"
+                                      >
+                                        Editar produto
+                                      </button>
+                                      <button
+                                        onClick={() => alternarVisibilidadeProduto(produto.id)}
+                                        className="w-full text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-zinc-700 hover:bg-zinc-50 cursor-pointer transition-colors"
+                                      >
+                                        {produto.oculto ? 'Tornar visível' : 'Ocultar produto'}
+                                      </button>
+                                      <button
+                                        onClick={() => abrirExclusaoProduto(produto)}
+                                        className="w-full text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-red-500 hover:bg-red-50 cursor-pointer transition-colors"
+                                      >
+                                        Excluir produto
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -1398,7 +1530,17 @@ const handleFileUpload = async (e) => {
                 <h2 className="text-2xl font-normal tracking-tight text-zinc-900">Pedidos</h2>
                 <p className="text-xs text-zinc-400 mt-0.5 uppercase tracking-wider">Acompanhe e gerencie os pedidos da loja</p>
               </div>
-              <div className="w-full sm:w-56">
+              <div className="grid w-full gap-3 sm:grid-cols-2 lg:w-[30rem]">
+                <div className="relative">
+                  <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm" />
+                  <input
+                    type="text"
+                    value={termoBuscaPedido}
+                    onChange={(e) => setTermoBuscaPedido(e.target.value)}
+                    placeholder="Buscar por pedido, cliente, e-mail..."
+                    className="w-full bg-white border border-zinc-200 rounded-lg pl-9 pr-4 py-2.5 text-xs focus:outline-none focus:border-black"
+                  />
+                </div>
                 <select
                   value={filtroStatusPedido}
                   onChange={(e) => setFiltroStatusPedido(e.target.value)}
@@ -1602,15 +1744,26 @@ const handleFileUpload = async (e) => {
               <div>
                 <h2 className="text-2xl font-normal tracking-tight">Usuários</h2>
               </div>
-              <div className="relative w-full sm:max-w-sm">
-                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm" />
-                <input
-                  type="text"
-                  placeholder="Buscar por nome ou e-mail..."
-                  value={termoBuscaUsuario}
-                  onChange={(e) => setTermoBuscaUsuario(e.target.value)}
-                  className="pl-9 pr-4 py-3 border border-zinc-200 rounded-xl text-sm w-full bg-white focus:outline-none focus:border-black"
-                />
+              <div className="grid w-full gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+                <div className="relative w-full">
+                  <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm" />
+                  <input
+                    type="text"
+                    placeholder="Buscar por nome ou e-mail..."
+                    value={termoBuscaUsuario}
+                    onChange={(e) => setTermoBuscaUsuario(e.target.value)}
+                    className="pl-9 pr-4 py-3 border border-zinc-200 rounded-xl text-sm w-full bg-white focus:outline-none focus:border-black"
+                  />
+                </div>
+                <select
+                  value={ordenacaoUsuarios}
+                  onChange={(e) => setOrdenacaoUsuarios(e.target.value)}
+                  className="w-full border border-zinc-200 rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:border-black"
+                >
+                  <option value="recentes">Mais recentes</option>
+                  <option value="nome-asc">Nome A-Z</option>
+                  <option value="admin-first">Admins primeiro</option>
+                </select>
               </div>
             </header>
 
