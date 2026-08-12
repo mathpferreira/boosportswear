@@ -5,6 +5,17 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class ProdutosService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private normalizarTamanhos(tamanhos: any) {
+    if (!Array.isArray(tamanhos)) return [];
+
+    return tamanhos
+      .map((item) => ({
+        label: String(item?.label || '').trim(),
+        estoque: Number(item?.estoque || 0),
+      }))
+      .filter((item) => item.label);
+  }
+
   async listarTodos() {
     return await this.prisma.produto.findMany({
       orderBy: { criadoEm: 'desc' },
@@ -29,12 +40,15 @@ export class ProdutosService {
 
     const imagens = Array.isArray(dados.imagens) ? dados.imagens : [];
     const cores = Array.isArray(dados.cores) ? dados.cores : [];
+    const tamanhos = this.normalizarTamanhos(dados.tamanhos);
+    const estoqueTotal = tamanhos.reduce((acc, item) => acc + item.estoque, 0);
 
     return await this.prisma.produto.create({
       data: {
         nome: dados.nome,
         preco: Number(dados.preco) || 0,
-        estoque: Number(dados.estoque) || 0,
+        estoque: tamanhos.length > 0 ? estoqueTotal : Number(dados.estoque) || 0,
+        tamanhos,
         categoria: dados.categoria || "Geral",
         esgotado: dados.esgotado ?? false,
         ultimaPeca: dados.ultimaPeca ?? false,
@@ -54,13 +68,16 @@ export class ProdutosService {
 
     const imagens = Array.isArray(dados.imagens) ? dados.imagens : [];
     const cores = Array.isArray(dados.cores) ? dados.cores : [];
+    const tamanhos = this.normalizarTamanhos(dados.tamanhos);
+    const estoqueTotal = tamanhos.reduce((acc, item) => acc + item.estoque, 0);
 
     return await this.prisma.produto.update({
       where: { id },
       data: {
         nome: dados.nome,
         preco: Number(dados.preco) || 0,
-        estoque: Number(dados.estoque) || 0,
+        estoque: tamanhos.length > 0 ? estoqueTotal : Number(dados.estoque) || 0,
+        tamanhos,
         categoria: dados.categoria || "Geral",
         esgotado: dados.esgotado ?? false,
         ultimaPeca: dados.ultimaPeca ?? false,

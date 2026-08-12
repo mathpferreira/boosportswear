@@ -62,7 +62,7 @@ function CardProduto({ produto, onAbrir }) {
 
 // COMPONENTE PRINCIPAL: Loja
 export default function Loja() {
-  const { id: produtoIdRota } = useParams();
+  const { slugId: produtoSlugRota } = useParams();
   const [produtosBrazilian, setProdutosBrazilian] = useState([]);
   
   // Controle de visão
@@ -155,6 +155,21 @@ export default function Loja() {
   });
 
   const API_URL = "http://167.148.161.90/api";
+  const TAMANHOS_PADRAO = ["P", "M", "G", "Tamanho Único"];
+
+  const slugificarProduto = (texto = "") =>
+    texto
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+  const extrairIdDaRotaProduto = (valor = "") => {
+    if (!valor) return "";
+    const partes = valor.split("--");
+    return partes[partes.length - 1] || "";
+  };
 
   // 1. CARREGAR USUÁRIO SALVO (Mantém logado ao dar F5)
   useEffect(() => {
@@ -181,7 +196,7 @@ export default function Loja() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  const navegarParaVisao = (proximaVisao, { replace = false, produtoId = null } = {}) => {
+  const navegarParaVisao = (proximaVisao, { replace = false, produtoId = null, produtoNome = "" } = {}) => {
     const rotaHash = {
       home: '',
       produto: 'produto',
@@ -191,7 +206,9 @@ export default function Loja() {
     };
 
     const proximoHash = rotaHash[proximaVisao] || '';
-    const pathname = proximaVisao === 'produto' && produtoId ? `/produto/${produtoId}` : '/';
+    const pathname = proximaVisao === 'produto' && produtoId
+      ? `/produto/${slugificarProduto(produtoNome || produtoSelecionado?.nome || '') || 'produto'}--${produtoId}`
+      : '/';
     const novaUrl = `${pathname}${proximoHash && proximaVisao !== 'produto' ? `#${proximoHash}` : ''}`;
     if (replace) {
       window.history.replaceState({ visao: proximaVisao }, '', novaUrl);
@@ -222,6 +239,7 @@ export default function Loja() {
   }, []);
 
   useEffect(() => {
+    const produtoIdRota = extrairIdDaRotaProduto(produtoSlugRota);
     if (!produtoIdRota || produtosBrazilian.length === 0) return;
     const produto = produtosBrazilian.find((item) => item.id === produtoIdRota);
     if (!produto) return;
@@ -229,7 +247,7 @@ export default function Loja() {
     setTamanhoEscolhido("M");
     setIndiceImagemModal(0);
     setVisaoAtual('produto');
-  }, [produtoIdRota, produtosBrazilian]);
+  }, [produtoSlugRota, produtosBrazilian]);
 
   useEffect(() => {
     async function carregarConfiguracoes() {
@@ -267,9 +285,13 @@ export default function Loja() {
 
   const abrirProduto = (produto) => {
     setProdutoSelecionado(produto);
-    setTamanhoEscolhido("M");
+    const tamanhosDisponiveis = Array.isArray(produto.tamanhos) && produto.tamanhos.length > 0
+      ? produto.tamanhos
+      : TAMANHOS_PADRAO.map((label) => ({ label, estoque: label === "M" ? 1 : 0 }));
+    const primeiroDisponivel = tamanhosDisponiveis.find((item) => Number(item.estoque || 0) > 0);
+    setTamanhoEscolhido(primeiroDisponivel?.label || "M");
     setIndiceImagemModal(0);
-    navegarParaVisao('produto', { produtoId: produto.id });
+    navegarParaVisao('produto', { produtoId: produto.id, produtoNome: produto.nome });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -644,6 +666,14 @@ export default function Loja() {
   const imagensModal = produtoSelecionado?.imagens?.length > 0 
     ? produtoSelecionado.imagens 
     : (produtoSelecionado ? [{ url: produtoSelecionado.imgUrl }] : []);
+  const tamanhosProdutoSelecionado = useMemo(() => {
+    if (!produtoSelecionado) return [];
+    if (Array.isArray(produtoSelecionado.tamanhos) && produtoSelecionado.tamanhos.length > 0) {
+      return produtoSelecionado.tamanhos;
+    }
+    return TAMANHOS_PADRAO.map((label) => ({ label, estoque: label === "M" ? 1 : 0 }));
+  }, [produtoSelecionado]);
+  const tamanhoSelecionadoInfo = tamanhosProdutoSelecionado.find((item) => item.label === tamanhoEscolhido);
 
   const isAdmin = usuarioLogado?.role === 'ADMIN';
   const totalPedidosCliente = meusPedidos.length;
@@ -696,6 +726,9 @@ export default function Loja() {
                 alt="BOO Sportswear"
                 className="h-8 sm:h-10 w-auto cursor-pointer select-none"
               />
+              <span className="md:hidden text-[11px] font-bold uppercase tracking-[0.22em] text-zinc-900">
+                BOO SPORTWEAR
+              </span>
             </div>
 
             <div className="flex items-center gap-4 sm:gap-5">
@@ -973,10 +1006,26 @@ export default function Loja() {
 
                     <div>
                       <label className={labelClasses}>Tamanho</label>
-                      <div className="flex gap-2">
-                        {["PP", "P", "M", "G", "GG"].map(tam => (
-                          <button key={tam} onClick={() => setTamanhoEscolhido(tam)} className={`w-12 h-12 border rounded text-sm font-bold cursor-pointer transition-colors ${tamanhoEscolhido === tam ? "border-black bg-black text-white" : "border-zinc-200 text-zinc-700 hover:border-zinc-400"}`}>{tam}</button>
-                        ))}
+                      <div className="flex flex-wrap gap-2">
+                        {tamanhosProdutoSelecionado.map((tam) => {
+                          const indisponivel = Number(tam.estoque || 0) <= 0;
+                          return (
+                            <button
+                              key={tam.label}
+                              type="button"
+                              disabled={indisponivel}
+                              onClick={() => setTamanhoEscolhido(tam.label)}
+                              className={`relative min-w-[3.25rem] h-12 px-3 border rounded text-xs font-bold cursor-pointer transition-colors overflow-hidden ${
+                                tamanhoEscolhido === tam.label
+                                  ? "border-black bg-black text-white"
+                                  : "border-zinc-200 text-zinc-700 hover:border-zinc-400"
+                              } ${indisponivel ? "opacity-50 cursor-not-allowed bg-zinc-50 text-zinc-400" : ""}`}
+                            >
+                              <span>{tam.label === "Tamanho Único" ? "TU" : tam.label}</span>
+                              {indisponivel && <span className="absolute left-[-20%] top-1/2 h-[2px] w-[140%] rotate-[-35deg] bg-red-500"></span>}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -992,7 +1041,7 @@ export default function Loja() {
                     </div>
                   </div>
 
-                  <button onClick={() => adicionarAoCarrinho(produtoSelecionado, tamanhoEscolhido)} disabled={!configLoja.lojaAberta} className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors mt-8 cursor-pointer disabled:bg-zinc-300 disabled:cursor-not-allowed">
+                  <button onClick={() => adicionarAoCarrinho(produtoSelecionado, tamanhoEscolhido)} disabled={!configLoja.lojaAberta || Number(tamanhoSelecionadoInfo?.estoque || 0) <= 0} className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors mt-8 cursor-pointer disabled:bg-zinc-300 disabled:cursor-not-allowed">
                     {configLoja.lojaAberta ? "Adicionar à Sacola" : "Loja Fechada no Momento"}
                   </button>
                 </div>

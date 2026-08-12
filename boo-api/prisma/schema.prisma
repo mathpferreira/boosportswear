@@ -12,6 +12,7 @@ model Produto {
   nome       String
   preco      Float
   estoque    Int      @default(0)
+  tamanhos   Json     @default("[]")
   categoria  String   @default("Geral")
   esgotado   Boolean  @default(false)
   ultimaPeca Boolean  @default(false)

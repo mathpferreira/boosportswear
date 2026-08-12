@@ -24,6 +24,7 @@ import {
 } from 'react-icons/fi';
 
 export default function Admin() {
+  const TAMANHOS_PADRAO = ["P", "M", "G", "Tamanho Único"];
   const [isVerificando, setIsVerificando] = useState(true);
   const [isMenuAberto, setIsMenuAberto] = useState(false);
   const [produtos, setProdutos] = useState([]);
@@ -121,6 +122,9 @@ const dispararToast = (msg, tipo = "sucesso") => {
           ...p,
           imagens: p.imagens ? p.imagens.map(img => typeof img === 'string' ? { url: img, cor: p.cores ? p.cores[0] : "#000000" } : img) : [{ url: p.imgUrl, cor: "#000000" }],
           cores: p.cores || ["#000000"],
+          tamanhos: Array.isArray(p.tamanhos) && p.tamanhos.length > 0
+            ? p.tamanhos
+            : TAMANHOS_PADRAO.map((label) => ({ label, estoque: label === "M" ? 1 : 0 })),
           preco: p.preco?.toString().replace('.', ',') || "0,00"
         }));
         setProdutos(produtosFormatados);
@@ -332,7 +336,8 @@ const dispararToast = (msg, tipo = "sucesso") => {
       estoque: "",
       categoria: categorias[0]?.nome || "Conjuntos",
       cores: ["#000000"],
-      imagens: []
+      imagens: [],
+      tamanhos: TAMANHOS_PADRAO.map((label) => ({ label, estoque: label === "M" ? 1 : 0 }))
     };
     setProdutos([produtoVazio, ...produtos]);
     setProdutoEditando(produtoVazio);
@@ -432,13 +437,18 @@ const handleFileUpload = async (e) => {
       return;
     }
 
-    const estoqueNum = parseInt(produtoEditando.estoque, 10);
+    const tamanhosNormalizados = (produtoEditando.tamanhos || []).map((item) => ({
+      label: item.label,
+      estoque: Number(item.estoque || 0),
+    }));
+    const estoqueNum = tamanhosNormalizados.reduce((acc, item) => acc + item.estoque, 0);
     const precoFloat = parseFloat(produtoEditando.preco.toString().replace(',', '.'));
 
     const payload = {
       nome: produtoEditando.nome,
       preco: isNaN(precoFloat) ? 0 : precoFloat,
       estoque: isNaN(estoqueNum) ? 0 : estoqueNum,
+      tamanhos: tamanhosNormalizados,
       categoria: produtoEditando.categoria || (categorias[0]?.nome || "Conjuntos"),
       cores: produtoEditando.cores,
       imagens: produtoEditando.imagens,
@@ -1252,6 +1262,40 @@ const handleFileUpload = async (e) => {
                           ))}
                         </select>
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-2xs">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-xs uppercase tracking-widest text-zinc-400 font-bold">Tamanhos e Estoque</h3>
+                      <span className="text-[11px] text-zinc-400">
+                        Total: {(produtoEditando.tamanhos || []).reduce((acc, item) => acc + Number(item.estoque || 0), 0)} un.
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {(produtoEditando.tamanhos || []).map((tam, index) => (
+                        <label key={tam.label} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 px-4 py-3 bg-zinc-50/50">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-700">{tam.label}</p>
+                            <p className="text-[11px] text-zinc-400 mt-1">Disponível para venda</p>
+                          </div>
+                          <input
+                            type="number"
+                            min="0"
+                            value={tam.estoque}
+                            onChange={(e) => {
+                              const valor = Number(e.target.value || 0);
+                              setProdutoEditando({
+                                ...produtoEditando,
+                                tamanhos: produtoEditando.tamanhos.map((item, itemIndex) =>
+                                  itemIndex === index ? { ...item, estoque: valor } : item
+                                )
+                              });
+                            }}
+                            className="w-24 border border-zinc-200 rounded-lg px-3 py-2 text-sm text-right focus:outline-none focus:border-black bg-white"
+                          />
+                        </label>
+                      ))}
                     </div>
                   </div>
 
