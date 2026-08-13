@@ -1169,7 +1169,6 @@ export default function Loja() {
                 {produtosNovidades.length > 0 && (
                   <Reveal className="mb-14"><section>
                     <div className="mb-6">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-zinc-400">Curadoria Boo</p>
                       <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-tight mt-2">Novidades</h3>
                     </div>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-4 sm:gap-x-8 gap-y-8">
@@ -1494,7 +1493,7 @@ export default function Loja() {
                           className="w-full flex items-center justify-between rounded-2xl bg-black text-white px-4 py-3 text-left hover:bg-zinc-800 transition-colors"
                         >
                           <div>
-                            <p className="text-xs font-bold uppercase tracking-wider">Gerenciador</p>
+                            <p className="text-xs font-bold uppercase tracking-wider">Administração</p>
                             <p className="text-[11px] text-zinc-300 mt-1">Abrir painel administrativo.</p>
                           </div>
                           <FiShield />
@@ -1927,7 +1926,7 @@ export default function Loja() {
           </div>
           <div className="text-center md:text-right text-xs text-zinc-400 tracking-wider">
             <nav className="mb-6 flex flex-col gap-3 text-[10px] font-bold uppercase">
-              <a href="/politicas" className="hover:text-white">Politicas da Loja</a>
+              <a href="/politicas" className="hover:text-white">Politicas</a>
             </nav>
             © BOO SPORTWEAR. TODOS OS DIREITOS RESERVADOS.
           </div>
