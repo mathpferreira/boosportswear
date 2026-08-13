@@ -25,9 +25,17 @@ export class ConfiguracoesService {
   }) {
     const config = await this.obter();
 
+    const payload = {
+      ...(dados.lojaAberta !== undefined ? { lojaAberta: Boolean(dados.lojaAberta) } : {}),
+      ...(dados.fraseTopo !== undefined ? { fraseTopo: String(dados.fraseTopo).trim().slice(0, 180) } : {}),
+      ...(dados.instagramUrl !== undefined ? { instagramUrl: String(dados.instagramUrl).trim().slice(0, 300) } : {}),
+      ...(dados.emailSuporte !== undefined ? { emailSuporte: String(dados.emailSuporte).trim().slice(0, 160) } : {}),
+      ...(dados.frete !== undefined ? { frete: dados.frete } : {}),
+    };
+
     return this.prisma.configuracao.update({
       where: { id: config.id },
-      data: dados,
+      data: payload,
     });
   }
 }

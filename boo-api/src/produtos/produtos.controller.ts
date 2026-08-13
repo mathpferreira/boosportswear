@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Put, Delete, Body, Param, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import sharp from 'sharp';
@@ -27,9 +27,16 @@ export class ProdutosController {
     return await this.produtosService.listarTodos();
   }
 
+  @Get('admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async listarTodosAdmin() {
+    return await this.produtosService.listarTodosAdmin();
+  }
+
   @Get(':id')
   async buscarPorId(@Param('id') id: string) {
-    return await this.produtosService.buscarPorId(id);
+    return await this.produtosService.buscarPublicoPorId(id);
   }
 
   // ---- ROTAS PROTEGIDAS (só admin logado pode criar/editar/excluir/upload) ----
@@ -68,9 +75,14 @@ export class ProdutosController {
         },
       }),
       limits: { fileSize: 15 * 1024 * 1024 }, // 15MB por imagem (antes da compressão)
+      fileFilter: (req, file, callback) => {
+        const tiposAceitos = ['image/jpeg', 'image/png', 'image/webp'];
+        callback(null, tiposAceitos.includes(file.mimetype));
+      },
     }),
   )
   async uploadImagem(@UploadedFile() arquivo: ArquivoUpload) {
+    if (!arquivo) throw new BadRequestException('Envie uma imagem JPEG, PNG ou WEBP.');
     const caminhoOriginal = arquivo.path;
     const caminhoTemp = `${caminhoOriginal}.tmp`;
 

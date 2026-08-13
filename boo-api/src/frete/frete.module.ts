@@ -5,5 +5,6 @@ import { FreteService } from './frete.service';
 @Module({
   controllers: [FreteController],
   providers: [FreteService],
+  exports: [FreteService],
 })
 export class FreteModule {}

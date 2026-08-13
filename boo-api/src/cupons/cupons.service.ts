@@ -42,19 +42,32 @@ export class CuponsService {
     usosMaximos?: number | null;
   }) {
     const codigo = this.normalizarCodigo(dados.codigo);
+    const nome = String(dados.nome || '').trim();
+    const valor = Number(dados.valor);
+    if (nome.length < 2 || nome.length > 120) throw new BadRequestException('Nome de cupom invalido.');
+    if (!codigo || codigo.length > 40) throw new BadRequestException('Codigo de cupom invalido.');
+    if (!['PERCENTUAL', 'FIXO'].includes(dados.tipo)) throw new BadRequestException('Tipo de cupom invalido.');
+    if (!Number.isFinite(valor) || valor <= 0 || (dados.tipo === 'PERCENTUAL' && valor > 100)) {
+      throw new BadRequestException('Valor de cupom invalido.');
+    }
     const existente = await this.prisma.cupom.findUnique({ where: { codigo } });
     if (existente) {
       throw new BadRequestException('Já existe um cupom com esse código.');
     }
 
+    const expiraEm = dados.expiraEm ? new Date(dados.expiraEm) : null;
+    if (expiraEm && Number.isNaN(expiraEm.getTime())) {
+      throw new BadRequestException('Data de expiracao invalida.');
+    }
+
     return this.prisma.cupom.create({
       data: {
-        nome: dados.nome.trim(),
+        nome,
         codigo,
         tipo: dados.tipo,
-        valor: Number(dados.valor),
-        expiraEm: dados.expiraEm ? new Date(dados.expiraEm) : null,
-        usosMaximos: dados.usosMaximos || null,
+        valor,
+        expiraEm,
+        usosMaximos: dados.usosMaximos == null ? null : Math.max(1, Math.floor(Number(dados.usosMaximos))),
       },
     });
   }
@@ -77,24 +90,42 @@ export class CuponsService {
     }
 
     let codigoNormalizado: string | undefined;
+    const nomeNormalizado = dados.nome === undefined ? undefined : String(dados.nome).trim();
+    if (nomeNormalizado !== undefined && (nomeNormalizado.length < 2 || nomeNormalizado.length > 120)) {
+      throw new BadRequestException('Nome de cupom invalido.');
+    }
     if (dados.codigo) {
       codigoNormalizado = this.normalizarCodigo(dados.codigo);
+      if (codigoNormalizado.length > 40) throw new BadRequestException('Codigo de cupom invalido.');
       const outro = await this.prisma.cupom.findUnique({ where: { codigo: codigoNormalizado } });
       if (outro && outro.id !== id) {
         throw new BadRequestException('Já existe um cupom com esse código.');
       }
     }
+    if (dados.tipo && !['PERCENTUAL', 'FIXO'].includes(dados.tipo)) {
+      throw new BadRequestException('Tipo de cupom invalido.');
+    }
+    if (dados.valor !== undefined) {
+      const valor = Number(dados.valor);
+      if (!Number.isFinite(valor) || valor <= 0 || (dados.tipo === 'PERCENTUAL' && valor > 100) || (dados.tipo === undefined && cupom.tipo === 'PERCENTUAL' && valor > 100)) {
+        throw new BadRequestException('Valor de cupom invalido.');
+      }
+    }
+    const expiraEm = dados.expiraEm ? new Date(dados.expiraEm) : null;
+    if (expiraEm && Number.isNaN(expiraEm.getTime())) {
+      throw new BadRequestException('Data de expiracao invalida.');
+    }
 
     return this.prisma.cupom.update({
       where: { id },
       data: {
-        nome: dados.nome?.trim(),
+        nome: nomeNormalizado,
         codigo: codigoNormalizado,
         tipo: dados.tipo,
         valor: dados.valor != null ? Number(dados.valor) : undefined,
         ativo: dados.ativo,
-        expiraEm: dados.expiraEm === null ? null : (dados.expiraEm ? new Date(dados.expiraEm) : undefined),
-        usosMaximos: dados.usosMaximos === undefined ? undefined : dados.usosMaximos,
+        expiraEm: dados.expiraEm === null ? null : (dados.expiraEm ? expiraEm : undefined),
+        usosMaximos: dados.usosMaximos === undefined ? undefined : (dados.usosMaximos === null ? null : Math.max(1, Math.floor(Number(dados.usosMaximos)))),
       },
     });
   }
@@ -118,6 +149,9 @@ export class CuponsService {
     const cupomValido = cupom!;
 
     const subtotalNumerico = Number(subtotal || 0);
+    if (!Number.isFinite(subtotalNumerico) || subtotalNumerico < 0) {
+      throw new BadRequestException('Subtotal invalido.');
+    }
     const desconto = cupomValido.tipo === 'PERCENTUAL'
       ? subtotalNumerico * (cupomValido.valor / 100)
       : cupomValido.valor;

@@ -145,7 +145,10 @@ const normalizarTamanho = (label = "") =>
 
   const carregarProdutos = async () => {
     try {
-      const res = await fetch(`${API_URL}/produtos`);
+      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/produtos/admin`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
       if (res.ok) {
         const data = await res.json();
         const produtosFormatados = data.map(p => ({
@@ -410,6 +413,7 @@ const handleFileUpload = async (e) => {
     try {
       const res = await fetch(`${API_URL}/produtos/upload`, {
         method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('@BOO:token') || localStorage.getItem('token')}` },
         body: formData,
       });
 
@@ -488,6 +492,7 @@ const handleFileUpload = async (e) => {
       cores: produtoEditando.cores,
       imagens: produtoEditando.imagens,
       ultimaPeca: Boolean(produtoEditando.ultimaPeca),
+      oculto: Boolean(produtoEditando.oculto),
       imgUrl: produtoEditando.imagens[0]?.url || ""
     };
 
@@ -724,16 +729,27 @@ const handleFileUpload = async (e) => {
     ? categorias.map(c => c.nome) 
     : ["Conjuntos"];
 
-  const alternarVisibilidadeProduto = (produtoId) => {
-    setProdutos(prev => prev.map(produto => (
-      produto.id === produtoId ? { ...produto, oculto: !produto.oculto } : produto
-    )));
-    const produtoAtualizado = produtos.find(produto => produto.id === produtoId);
-    if (produtoAtualizado) {
-      registrarLogAcao('Administração Boo', `${produtoAtualizado.oculto ? 'Reativou' : 'Ocultou'} o produto ${produtoAtualizado.nome}`);
-      dispararToast(produtoAtualizado.oculto ? "Produto visível novamente." : "Produto ocultado da vitrine.");
+  const alternarVisibilidadeProduto = async (produtoId) => {
+    const produtoAtual = produtos.find((produto) => produto.id === produtoId);
+    if (!produtoAtual) return;
+    const oculto = !produtoAtual.oculto;
+    try {
+      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
+      const resposta = await fetch(`${API_URL}/produtos/${produtoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ...produtoAtual, preco: String(produtoAtual.preco).replace(',', '.'), oculto }),
+      });
+      if (!resposta.ok) throw new Error('Falha ao atualizar visibilidade.');
+      setProdutos((prev) => prev.map((produto) => produto.id === produtoId ? { ...produto, oculto } : produto));
+      registrarLogAcao('Administração Boo', `${oculto ? 'Ocultou' : 'Reativou'} o produto ${produtoAtual.nome}`);
+      dispararToast(oculto ? 'Produto ocultado da vitrine.' : 'Produto visível novamente.');
+    } catch (erro) {
+      console.error(erro);
+      dispararToast('Não foi possível alterar a visibilidade.', 'erro');
+    } finally {
+      setMenuProdutoAberto(null);
     }
-    setMenuProdutoAberto(null);
   };
 
   const abrirEdicaoProduto = (produto) => {
@@ -793,7 +809,7 @@ const handleFileUpload = async (e) => {
     STATUS_PEDIDO.find(s => s.valor === statusValor) || { label: statusValor || "—", cor: "bg-zinc-100 text-zinc-600" };
 
   // Métricas para o Dashboard (Home)
-  const pedidosPendentes = pedidos.filter(p => p.status === "pendente").length;
+  const pedidosPendentes = pedidos.filter(p => ["aguardando_pagamento", "pendente"].includes(p.status)).length;
   const hoje = new Date();
   const ehMesmoDia = (dataStr) => {
     const d = new Date(dataStr);
@@ -806,7 +822,7 @@ const handleFileUpload = async (e) => {
   const pedidosHoje = pedidos.filter(p => p.criadoEm && ehMesmoDia(p.criadoEm));
   const pedidosMes = pedidos.filter(p => p.criadoEm && ehMesmoMes(p.criadoEm));
   const faturamentoMes = pedidosMes
-    .filter(p => p.status !== "cancelado")
+    .filter(p => ["pago", "em_preparacao", "enviado", "entregue"].includes(p.status))
     .reduce((soma, p) => soma + (Number(p.total) || 0), 0);
   const ultimosPedidos = [...pedidos]
     .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm))
@@ -939,7 +955,7 @@ const handleFileUpload = async (e) => {
             Voltar ao Site
           </button>
           <button 
-            onClick={() => { localStorage.clear(); window.location.href='/login'; }}
+            onClick={() => { ['token', 'usuario', '@BOO:token', '@BOO:usuario'].forEach((chave) => localStorage.removeItem(chave)); window.location.href='/login'; }}
             className="w-full flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-xs tracking-wider uppercase font-medium transition-colors cursor-pointer"
           >
             <FiLogOut className="text-base" />
@@ -1026,7 +1042,7 @@ const handleFileUpload = async (e) => {
                 Voltar ao Site
               </button>
               <button 
-                onClick={() => { localStorage.clear(); window.location.href='/login'; }}
+                onClick={() => { ['token', 'usuario', '@BOO:token', '@BOO:usuario'].forEach((chave) => localStorage.removeItem(chave)); window.location.href='/login'; }}
                 className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl text-xs tracking-wider uppercase font-medium transition-colors cursor-pointer"
               >
                 <FiLogOut className="text-base" />

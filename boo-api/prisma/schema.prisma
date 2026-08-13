@@ -16,6 +16,7 @@ model Produto {
   categoria  String   @default("Geral")
   esgotado   Boolean  @default(false)
   ultimaPeca Boolean  @default(false)
+  oculto     Boolean  @default(false)
   cores      String[]
   imgUrl     String   @default("")
   criadoEm   DateTime @default(now())

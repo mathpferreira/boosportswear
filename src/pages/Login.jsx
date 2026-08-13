@@ -68,6 +68,8 @@ export default function Login({ initialMode = 'login' }) {
 
       localStorage.setItem('@BOO:token', dados.token);
       localStorage.setItem('@BOO:usuario', JSON.stringify(dados.usuario));
+      localStorage.setItem('token', dados.token);
+      localStorage.setItem('usuario', JSON.stringify(dados.usuario));
 
       if (dados.usuario.role === 'ADMIN') {
         window.location.href = '/admin';

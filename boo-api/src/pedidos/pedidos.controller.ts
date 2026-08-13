@@ -9,6 +9,7 @@ export class PedidosController {
   constructor(private readonly pedidosService: PedidosService) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard)
   criar(
     @Body()
     body: {
@@ -20,8 +21,9 @@ export class PedidosController {
       total: number;
       cupom?: any;
     },
+    @Req() req: any,
   ) {
-    return this.pedidosService.criar(body);
+    return this.pedidosService.criar(body, req.user.id);
   }
 
   @Get()

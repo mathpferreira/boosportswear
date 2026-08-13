@@ -87,6 +87,7 @@ function Reveal({ children, className = '' }) {
 
 // COMPONENTE PRINCIPAL: Loja
 export default function Loja() {
+  const obterToken = () => localStorage.getItem('token') || localStorage.getItem('@BOO:token');
   const { slugId: produtoSlugRota } = useParams();
   const [produtosBrazilian, setProdutosBrazilian] = useState([]);
   
@@ -203,7 +204,7 @@ export default function Loja() {
 
   // 1. CARREGAR USUÁRIO SALVO (Mantém logado ao dar F5)
   useEffect(() => {
-    const usuarioSalvo = localStorage.getItem('usuario');
+    const usuarioSalvo = localStorage.getItem('usuario') || localStorage.getItem('@BOO:usuario');
     if (usuarioSalvo) {
       setUsuarioLogado(JSON.parse(usuarioSalvo));
     }
@@ -518,6 +519,11 @@ export default function Loja() {
   };
 
   const irParaEntrega = () => {
+    if (!usuarioLogado) {
+      setErroPedido('Entre na sua conta para finalizar a compra.');
+      setIsLoginAberto(true);
+      return;
+    }
     if (usuarioLogado) {
       setDadosEntrega(prev => ({
         ...prev,
@@ -538,19 +544,6 @@ export default function Loja() {
 
   const handleChangeEntrega = (campo) => (e) => {
     setDadosEntrega(prev => ({ ...prev, [campo]: e.target.value }));
-  };
-
-  const preencherCepEntrega = async () => {
-    const endereco = await buscarEnderecoPorCep(dadosEntrega.cep);
-    if (!endereco) return;
-    setDadosEntrega(prev => ({
-      ...prev,
-      cep: endereco.cep,
-      rua: prev.rua || endereco.rua,
-      bairro: prev.bairro || endereco.bairro,
-      cidade: prev.cidade || endereco.cidade,
-      estado: prev.estado || endereco.estado,
-    }));
   };
 
   const preencherCepConta = async () => {
@@ -596,7 +589,7 @@ export default function Loja() {
     setCarregandoPedidos(true);
     setErroPedidos(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = obterToken();
       const resposta = await fetch(`${API_URL}/meus-pedidos`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -616,7 +609,7 @@ export default function Loja() {
 
   const carregarMinhaConta = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = obterToken();
       const resposta = await fetch(`${API_URL}/minha-conta`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -652,7 +645,7 @@ export default function Loja() {
     setSalvandoConta(true);
     setMensagemConta(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = obterToken();
       const resposta = await fetch(`${API_URL}/minha-conta`, {
         method: "PATCH",
         headers: {
@@ -668,6 +661,7 @@ export default function Loja() {
       const usuarioAtualizado = { ...usuarioLogado, ...dados };
       setUsuarioLogado(usuarioAtualizado);
       localStorage.setItem('usuario', JSON.stringify(usuarioAtualizado));
+      localStorage.setItem('@BOO:usuario', JSON.stringify(usuarioAtualizado));
     } catch (erro) {
       setMensagemConta({ tipo: "erro", texto: erro.message });
     } finally {
@@ -690,7 +684,10 @@ export default function Loja() {
     try {
       const resposta = await fetch(`${API_URL}/pedidos`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem('token') || localStorage.getItem('@BOO:token')}`,
+        },
         body: JSON.stringify({
           itens: carrinho,
           entrega: dadosEntrega,
@@ -701,7 +698,10 @@ export default function Loja() {
           usuarioId: usuarioLogado?.id || null
         })
       });
-      if (!resposta.ok) throw new Error("Falha ao processar pedido");
+      if (!resposta.ok) {
+        const erroApi = await resposta.json().catch(() => null);
+        throw new Error(erroApi?.message || "Falha ao processar pedido");
+      }
       const dados = await resposta.json();
       setNumeroPedido(dados.numeroPedido || dados.id || "—");
       setCarrinho([]);
@@ -709,6 +709,7 @@ export default function Loja() {
       setCodigoCupom("");
       setEtapaSacola("confirmado");
     } catch (erro) {
+      console.error(erro);
       setErroPedido("Não foi possível concluir o pedido agora. Tente novamente.");
     } finally {
       setEnviandoPedido(false);

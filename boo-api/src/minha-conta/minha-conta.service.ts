@@ -65,9 +65,17 @@ export class MinhaContaService {
       };
     },
   ) {
-    if (dados.email) {
+    const nome = dados.nome === undefined ? undefined : String(dados.nome).trim();
+    const email = dados.email === undefined ? undefined : String(dados.email).trim().toLowerCase();
+    if (nome !== undefined && (nome.length < 2 || nome.length > 120)) {
+      throw new BadRequestException('Informe um nome valido.');
+    }
+    if (email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new BadRequestException('Informe um e-mail valido.');
+    }
+    if (email) {
       const emailEmUso = await this.prisma.user.findUnique({
-        where: { email: dados.email },
+        where: { email },
       });
       if (emailEmUso && emailEmUso.id !== usuarioId) {
         throw new BadRequestException('Este e-mail já está em uso.');
@@ -77,8 +85,8 @@ export class MinhaContaService {
     const usuario = await this.prisma.user.update({
       where: { id: usuarioId },
       data: {
-        nome: dados.nome,
-        email: dados.email,
+        nome,
+        email,
         telefone: dados.telefone,
         enderecoPadrao: dados.enderecoPadrao,
         preferenciasConta: dados.preferenciasConta,
