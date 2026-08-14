@@ -611,7 +611,7 @@ export default function Loja() {
     const subtotalCotacao = itensCotacao.reduce((total, item) => total + Number(item.preco || 0) * Number(item.quantidade || 1), 0);
 
     try {
-      const destinoInfo = await buscarCep(cepLimpo);
+      const destinoInfo = await buscarEnderecoPorCep(cepLimpo);
       setDestinoFreteInfo(destinoInfo);
 
       const resposta = await fetch(`${API_URL}/frete/cotar`, {
