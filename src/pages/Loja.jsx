@@ -90,6 +90,38 @@ export default function Loja() {
   const obterToken = () => localStorage.getItem('token') || localStorage.getItem('@BOO:token');
   const { slugId: produtoSlugRota } = useParams();
   const [produtosBrazilian, setProdutosBrazilian] = useState([]);
+  const cidadesEntregaMoto = useMemo(() => new Set([
+    'sao paulo',
+    'guarulhos',
+    'osasco',
+    'barueri',
+    'carapicuiba',
+    'itapevi',
+    'jandira',
+    'cotia',
+    'embu das artes',
+    'embudasartes',
+    'taboao da serra',
+    'diadema',
+    'sao bernardo do campo',
+    'sao caetano do sul',
+    'santo andre',
+    'maua',
+    'ribeirao pires',
+    'rio grande da serra',
+    'ferraz de vasconcelos',
+    'poa',
+    'itaquaquecetuba',
+    'suzano',
+    'mogi das cruzes',
+    'aruja',
+    'santa isabel',
+    'franco da rocha',
+    'francisco morato',
+    'caieiras',
+    'cajamar',
+    'pirapora do bom jesus'
+  ]), []);
   
   // Controle de visão
   const [visaoAtual, setVisaoAtual] = useState('home'); 
@@ -102,6 +134,7 @@ export default function Loja() {
   const [etapaSacola, setEtapaSacola] = useState("carrinho");
   const [cep, setCep] = useState("");
   const [freteResultado, setFreteResultado] = useState(null);
+  const [destinoFreteInfo, setDestinoFreteInfo] = useState(null);
 
   // Catálogo — filtro e busca
   const [categoriaAtiva, setCategoriaAtiva] = useState("Todos");
@@ -195,6 +228,51 @@ export default function Loja() {
 
   const normalizarTamanho = (label = "") =>
     String(label).toLowerCase().includes("nico") ? "U" : String(label);
+
+  const normalizarCidade = (valor = "") =>
+    String(valor)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z\s]/g, '')
+      .trim();
+
+  const isJadlogPackage = (opcao) => {
+    const nome = String(opcao?.nome || '').toLowerCase();
+    const codigo = String(opcao?.codigo || '').toLowerCase();
+    return nome.includes('jadlog') && (nome.includes('package') || codigo.includes('jadlog_package'));
+  };
+
+  const entregaMotoInfo = useMemo(() => {
+    const cepLimpo = cep.replace(/\D/g, '');
+    const uf = String(destinoFreteInfo?.estado || '').toUpperCase();
+    const cidadeNormalizada = normalizarCidade(destinoFreteInfo?.cidade || '');
+    const dentroDaArea = uf === 'SP' && cidadesEntregaMoto.has(cidadeNormalizada);
+
+    if (cepLimpo.length !== 8) {
+      return {
+        bloqueada: true,
+        aviso: 'Disponivel apenas para capital e Grande Sao Paulo. Informe um CEP para consultar.',
+      };
+    }
+
+    if (dentroDaArea) {
+      return {
+        bloqueada: false,
+        aviso: 'Disponivel para capital e Grande Sao Paulo. Valor e prazo combinados apos a compra.',
+      };
+    }
+
+    return {
+      bloqueada: true,
+      aviso: 'Entrega por moto apenas para CEPs da capital e Grande Sao Paulo. Litoral e interior nao sao atendidos.',
+    };
+  }, [cep, cidadesEntregaMoto, destinoFreteInfo]);
+
+  const opcoesFreteExibidas = useMemo(() => {
+    const opcoes = freteResultado?.opcoes || (freteResultado?.valor !== undefined ? [freteResultado] : []);
+    return opcoes.filter((opcao) => !isJadlogPackage(opcao));
+  }, [freteResultado]);
 
   const extrairIdDaRotaProduto = (valor = "") => {
     if (!valor) return "";
@@ -513,6 +591,49 @@ export default function Loja() {
       if (!resposta.ok) throw new Error(dados.message || 'Não foi possível calcular o frete.');
       const melhorOpcao = dados.opcoes?.[0];
       setFreteResultado(melhorOpcao ? { ...melhorOpcao, opcoes: dados.opcoes } : { erro: 'Nenhum frete disponível para este CEP.' });
+    } catch (erro) {
+      setFreteResultado({ erro: erro.message });
+    }
+  };
+
+  const calcularFreteConfiguradoNovo = async () => {
+    const cepLimpo = cep.replace(/\D/g, '');
+    if (cepLimpo.length !== 8) {
+      setDestinoFreteInfo(null);
+      setFreteResultado({ erro: 'Informe um CEP valido.' });
+      return;
+    }
+
+    setFreteResultado({ carregando: true });
+    const itensCotacao = carrinho.length > 0
+      ? carrinho
+      : produtoSelecionado ? [{ ...produtoSelecionado, quantidade: 1 }] : [];
+    const subtotalCotacao = itensCotacao.reduce((total, item) => total + Number(item.preco || 0) * Number(item.quantidade || 1), 0);
+
+    try {
+      const destinoInfo = await buscarCep(cepLimpo);
+      setDestinoFreteInfo(destinoInfo);
+
+      const resposta = await fetch(`${API_URL}/frete/cotar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cep: cepLimpo,
+          subtotal: subtotalCotacao,
+          itens: itensCotacao.map((item) => ({ id: item.id, nome: item.nome, preco: item.preco, quantidade: item.quantidade || 1 })),
+        }),
+      });
+
+      const dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.message || 'Nao foi possivel calcular o frete.');
+
+      const opcoesFiltradas = (dados.opcoes || []).filter((opcao) => !isJadlogPackage(opcao));
+      const melhorOpcao = opcoesFiltradas[0];
+      setFreteResultado(
+        melhorOpcao
+          ? { ...melhorOpcao, opcoes: opcoesFiltradas }
+          : { erro: 'Nenhuma modalidade disponivel para este CEP no momento.' }
+      );
     } catch (erro) {
       setFreteResultado({ erro: erro.message });
     }
@@ -1272,19 +1393,28 @@ export default function Loja() {
                       <label className={labelClasses}>Calcular Frete</label>
                        <div className="flex flex-col sm:flex-row gap-2 max-w-sm">
                         <input type="text" placeholder="00000-000" value={cep} onChange={(e) => setCep(e.target.value)} className={inputClasses} />
-                        <button type="button" onClick={calcularFreteConfigurado} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
+                        <button type="button" onClick={calcularFreteConfiguradoNovo} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
                       </div>
                       {freteResultado && (
                         <div className="mt-3 text-xs animate-fadeIn">
                           {freteResultado.carregando && <p className="text-zinc-500">Consultando transportadoras...</p>}
                           {freteResultado.erro && <p className="text-red-600">{freteResultado.erro}</p>}
-                          {freteResultado.valor !== undefined && (
+                          {!freteResultado.carregando && (
                             <div className="space-y-2">
-                              {(freteResultado.opcoes || [freteResultado]).map((opcao) => (
+                              <div className={`rounded-2xl border px-4 py-3 ${entregaMotoInfo.bloqueada ? 'border-zinc-200 bg-zinc-50 text-zinc-400' : 'border-amber-300 bg-amber-50 text-zinc-900'}`}>
+                                <div className="flex items-center justify-between gap-3">
+                                  <span>
+                                    <strong className="block text-[11px] uppercase tracking-[0.16em]">Entrega via motoboy no mesmo dia</strong>
+                                    <small className="mt-1 block">{entregaMotoInfo.aviso}</small>
+                                  </span>
+                                  <strong className={`${entregaMotoInfo.bloqueada ? 'text-zinc-400' : 'text-amber-700'}`}>A combinar</strong>
+                                </div>
+                              </div>
+                              {opcoesFreteExibidas.map((opcao) => (
                                 <button
                                   key={`${opcao.codigo || opcao.nome}-${opcao.valor}`}
                                   type="button"
-                                  onClick={() => setFreteResultado({ ...opcao, opcoes: freteResultado.opcoes })}
+                                  onClick={() => setFreteResultado({ ...opcao, opcoes: opcoesFreteExibidas })}
                                   className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-3 text-left border ${opcao.codigo === freteResultado.codigo ? 'border-black bg-zinc-50' : 'border-zinc-200'}`}
                                 >
                                   <span><strong className="block text-zinc-900">{opcao.nome}</strong><small className="text-zinc-500">{opcao.prazo}</small></span>
