@@ -92,35 +92,43 @@ export default function Loja() {
   const [produtosBrazilian, setProdutosBrazilian] = useState([]);
   const cidadesEntregaMoto = useMemo(() => new Set([
     'sao paulo',
-    'guarulhos',
-    'osasco',
-    'barueri',
-    'carapicuiba',
-    'itapevi',
-    'jandira',
-    'cotia',
-    'embu das artes',
-    'embudasartes',
-    'taboao da serra',
-    'diadema',
-    'sao bernardo do campo',
-    'sao caetano do sul',
-    'santo andre',
-    'maua',
-    'ribeirao pires',
-    'rio grande da serra',
-    'ferraz de vasconcelos',
-    'poa',
-    'itaquaquecetuba',
-    'suzano',
-    'mogi das cruzes',
     'aruja',
-    'santa isabel',
-    'franco da rocha',
-    'francisco morato',
+    'barueri',
+    'biritiba mirim',
     'caieiras',
     'cajamar',
-    'pirapora do bom jesus'
+    'carapicuiba',
+    'cotia',
+    'diadema',
+    'embu das artes',
+    'embu guacu',
+    'ferraz de vasconcelos',
+    'francisco morato',
+    'franco da rocha',
+    'guararema',
+    'guarulhos',
+    'itapecerica da serra',
+    'itapevi',
+    'itaquaquecetuba',
+    'jandira',
+    'juquitiba',
+    'mairipora',
+    'maua',
+    'mogi das cruzes',
+    'osasco',
+    'pirapora do bom jesus',
+    'poa',
+    'ribeirao pires',
+    'rio grande da serra',
+    'salesopolis',
+    'santa isabel',
+    'santana de parnaiba',
+    'santo andre',
+    'sao bernardo do campo',
+    'sao caetano do sul',
+    'suzano',
+    'taboao da serra',
+    'vargem grande paulista'
   ]), []);
   
   // Controle de visão
@@ -243,30 +251,11 @@ export default function Loja() {
     return nome.includes('jadlog') && (nome.includes('package') || codigo.includes('jadlog_package'));
   };
 
-  const entregaMotoInfo = useMemo(() => {
+  const entregaMotoDisponivel = useMemo(() => {
     const cepLimpo = cep.replace(/\D/g, '');
     const uf = String(destinoFreteInfo?.estado || '').toUpperCase();
     const cidadeNormalizada = normalizarCidade(destinoFreteInfo?.cidade || '');
-    const dentroDaArea = uf === 'SP' && cidadesEntregaMoto.has(cidadeNormalizada);
-
-    if (cepLimpo.length !== 8) {
-      return {
-        bloqueada: true,
-        aviso: 'Disponivel apenas para capital e Grande Sao Paulo. Informe um CEP para consultar.',
-      };
-    }
-
-    if (dentroDaArea) {
-      return {
-        bloqueada: false,
-        aviso: 'Disponivel para capital e Grande Sao Paulo. Valor e prazo combinados apos a compra.',
-      };
-    }
-
-    return {
-      bloqueada: true,
-      aviso: 'Entrega por moto apenas para CEPs da capital e Grande Sao Paulo. Litoral e interior nao sao atendidos.',
-    };
+    return cepLimpo.length === 8 && uf === 'SP' && cidadesEntregaMoto.has(cidadeNormalizada);
   }, [cep, cidadesEntregaMoto, destinoFreteInfo]);
 
   const opcoesFreteExibidas = useMemo(() => {
@@ -1392,7 +1381,17 @@ export default function Loja() {
                     <div className="border-t border-b border-zinc-100 py-6 my-6">
                       <label className={labelClasses}>Calcular Frete</label>
                        <div className="flex flex-col sm:flex-row gap-2 max-w-sm">
-                        <input type="text" placeholder="00000-000" value={cep} onChange={(e) => setCep(e.target.value)} className={inputClasses} />
+                        <input
+                          type="text"
+                          placeholder="00000-000"
+                          value={cep}
+                          onChange={(e) => {
+                            setCep(e.target.value);
+                            setDestinoFreteInfo(null);
+                            setFreteResultado(null);
+                          }}
+                          className={inputClasses}
+                        />
                         <button type="button" onClick={calcularFreteConfiguradoNovo} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
                       </div>
                       {freteResultado && (
@@ -1401,16 +1400,21 @@ export default function Loja() {
                           {freteResultado.erro && <p className="text-red-600">{freteResultado.erro}</p>}
                           {!freteResultado.carregando && (
                             <div className="space-y-2">
-                              <div className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-3 text-left border ${entregaMotoInfo.bloqueada ? 'border-zinc-200 bg-zinc-50' : 'border-amber-300 bg-amber-50'}`}>
-                                <span className="min-w-0">
-                                  <strong className={`block ${entregaMotoInfo.bloqueada ? 'text-zinc-500' : 'text-zinc-900'}`}>Motoboy no mesmo dia</strong>
-                                  <small className={`block ${entregaMotoInfo.bloqueada ? 'text-zinc-400' : 'text-zinc-500'}`}>{entregaMotoInfo.aviso}</small>
-                                </span>
-                                <span className="shrink-0 text-right">
-                                  <strong className={`block ${entregaMotoInfo.bloqueada ? 'text-zinc-400' : 'text-amber-700'}`}>Sob consulta</strong>
-                                  <small className={`${entregaMotoInfo.bloqueada ? 'text-zinc-400' : 'text-zinc-500'}`}>via WhatsApp</small>
-                                </span>
-                              </div>
+                              {entregaMotoDisponivel && (
+                                <a
+                                  href="https://www.instagram.com/boosportwear/"
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="w-full flex items-center justify-between gap-3 rounded-lg px-3 py-3 text-left border border-zinc-200 hover:border-black transition-colors"
+                                  aria-label="Consultar entrega por motoboy no Instagram da BOO Sportwear"
+                                >
+                                  <span>
+                                    <strong className="block text-zinc-900">Motoboy no mesmo dia</strong>
+                                    <small className="text-zinc-500">Consulte pelo Instagram</small>
+                                  </span>
+                                  <strong className="shrink-0 text-green-700">A combinar</strong>
+                                </a>
+                              )}
                               {opcoesFreteExibidas.map((opcao) => (
                                 <button
                                   key={`${opcao.codigo || opcao.nome}-${opcao.valor}`}
