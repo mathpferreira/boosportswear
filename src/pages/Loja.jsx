@@ -603,6 +603,24 @@ export default function Loja() {
       const destinoInfo = await buscarEnderecoPorCep(cepLimpo);
       setDestinoFreteInfo(destinoInfo);
 
+      if (!destinoInfo) {
+        throw new Error('CEP nao encontrado. Confira os numeros e tente novamente.');
+      }
+
+      const cidadeDestino = normalizarCidade(destinoInfo.cidade || '');
+      const entregaMotoNoDestino = String(destinoInfo.estado || '').toUpperCase() === 'SP'
+        && cidadesEntregaMoto.has(cidadeDestino);
+
+      if (entregaMotoNoDestino) {
+        setFreteResultado({
+          codigo: 'motoboy',
+          nome: 'Motoboy no mesmo dia',
+          prazo: 'A combinar pelo Instagram',
+          opcoes: [],
+        });
+        return;
+      }
+
       const resposta = await fetch(`${API_URL}/frete/cotar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1415,7 +1433,7 @@ export default function Loja() {
                                   <strong className="shrink-0 text-green-700">A combinar</strong>
                                 </a>
                               )}
-                              {opcoesFreteExibidas.map((opcao) => (
+                              {!entregaMotoDisponivel && opcoesFreteExibidas.map((opcao) => (
                                 <button
                                   key={`${opcao.codigo || opcao.nome}-${opcao.valor}`}
                                   type="button"
@@ -1554,12 +1572,20 @@ export default function Loja() {
                       <div className="flex justify-between text-sm text-zinc-600">
                         <span>Frete</span>
                         <span>
-                          {freteResultado?.valor !== undefined
+                          {freteResultado?.codigo === 'motoboy'
+                            ? 'A combinar pelo Instagram'
+                            : freteResultado?.valor !== undefined
                             ? `R$ ${freteResultado.valor.toFixed(2).replace('.', ',')}`
                             : 'Calcule no produto'}
                         </span>
                       </div>
-                      <div className="flex justify-between text-lg font-black pt-3 border-t border-zinc-200"><span>Total</span><span>R$ {totalComFrete.toFixed(2).replace('.', ',')}</span></div>
+                      <div className="flex justify-between gap-4 text-lg font-black pt-3 border-t border-zinc-200">
+                        <span>Total</span>
+                        <span className="text-right">
+                          R$ {totalComFrete.toFixed(2).replace('.', ',')}
+                          {freteResultado?.codigo === 'motoboy' && <small className="block text-[10px] font-medium text-zinc-500">+ valor do motoboy</small>}
+                        </span>
+                      </div>
                     </div>
                     {erroPedido && <p className="text-[10px] text-red-500 font-bold uppercase mb-4 text-center">{erroPedido}</p>}
                     {etapaSacola === "carrinho" ? (
