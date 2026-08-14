@@ -1401,14 +1401,15 @@ export default function Loja() {
                           {freteResultado.erro && <p className="text-red-600">{freteResultado.erro}</p>}
                           {!freteResultado.carregando && (
                             <div className="space-y-2">
-                              <div className={`rounded-2xl border px-4 py-3 ${entregaMotoInfo.bloqueada ? 'border-zinc-200 bg-zinc-50 text-zinc-400' : 'border-amber-300 bg-amber-50 text-zinc-900'}`}>
-                                <div className="flex items-center justify-between gap-3">
-                                  <span>
-                                    <strong className="block text-[11px] uppercase tracking-[0.16em]">Entrega via motoboy no mesmo dia</strong>
-                                    <small className="mt-1 block">{entregaMotoInfo.aviso}</small>
-                                  </span>
-                                  <strong className={`${entregaMotoInfo.bloqueada ? 'text-zinc-400' : 'text-amber-700'}`}>A combinar</strong>
-                                </div>
+                              <div className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-3 text-left border ${entregaMotoInfo.bloqueada ? 'border-zinc-200 bg-zinc-50' : 'border-amber-300 bg-amber-50'}`}>
+                                <span className="min-w-0">
+                                  <strong className={`block ${entregaMotoInfo.bloqueada ? 'text-zinc-500' : 'text-zinc-900'}`}>Motoboy no mesmo dia</strong>
+                                  <small className={`block ${entregaMotoInfo.bloqueada ? 'text-zinc-400' : 'text-zinc-500'}`}>{entregaMotoInfo.aviso}</small>
+                                </span>
+                                <span className="shrink-0 text-right">
+                                  <strong className={`block ${entregaMotoInfo.bloqueada ? 'text-zinc-400' : 'text-amber-700'}`}>Sob consulta</strong>
+                                  <small className={`${entregaMotoInfo.bloqueada ? 'text-zinc-400' : 'text-zinc-500'}`}>via WhatsApp</small>
+                                </span>
                               </div>
                               {opcoesFreteExibidas.map((opcao) => (
                                 <button
