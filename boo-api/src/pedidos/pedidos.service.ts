@@ -1,8 +1,10 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CuponsService } from '../cupons/cupons.service';
 import { FreteService } from '../frete/frete.service';
+import { InfinitePayService } from '../pagamentos/infinitepay.service';
 
 @Injectable()
 export class PedidosService {
@@ -10,6 +12,7 @@ export class PedidosService {
     private readonly prisma: PrismaService,
     private readonly cuponsService: CuponsService,
     private readonly freteService: FreteService,
+    private readonly infinitePayService: InfinitePayService,
   ) {}
 
   private normalizarTamanho(label: unknown) {
@@ -17,11 +20,11 @@ export class PedidosService {
     return texto.toLowerCase().includes('nico') ? 'U' : texto;
   }
 
-  async criar(dados: any, usuarioId: string) {
+  async criar(dados: any, usuarioId: string, origemPublica: string) {
     if (!usuarioId) throw new BadRequestException('E necessario estar logado para comprar.');
     if (!Array.isArray(dados?.itens) || dados.itens.length === 0) throw new BadRequestException('A sacola esta vazia.');
     if (!dados?.entrega || !this.normalizarCep(dados.entrega.cep)) throw new BadRequestException('Informe um CEP de entrega valido.');
-    if (!['pix', 'cartao'].includes(dados.formaPagamento)) throw new BadRequestException('Forma de pagamento invalida.');
+    if (dados.formaPagamento !== 'infinitepay') throw new BadRequestException('Forma de pagamento invalida.');
 
     const linhas = new Map<string, { produtoId: string; tamanho: string; quantidade: number }>();
     for (const item of dados.itens) {
@@ -71,6 +74,13 @@ export class PedidosService {
     const cupom = dados.cupom?.codigo ? await this.cuponsService.validar(dados.cupom.codigo, subtotal) : null;
     const desconto = Number(cupom?.descontoAplicado || 0);
     const total = Math.max(subtotal - desconto, 0) + frete.valor;
+    const pedidoId = randomUUID();
+    const checkout = await this.infinitePayService.criarCheckout({
+      orderNsu: pedidoId,
+      total,
+      entrega: dados.entrega,
+      origemPublica,
+    });
 
     const pedido = await this.prisma.$transaction(async (tx) => {
       for (const item of itensValidados) {
@@ -107,18 +117,26 @@ export class PedidosService {
 
       return tx.pedido.create({
         data: {
+          id: pedidoId,
           usuarioId,
           itens: itensValidados,
           entrega: dados.entrega,
-          formaPagamento: dados.formaPagamento,
+          formaPagamento: 'infinitepay',
           frete,
+          pagamento: checkout.pagamento,
           total,
           status: 'aguardando_pagamento',
         },
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
-    return { id: pedido.id, numeroPedido: pedido.numero, status: pedido.status, total: pedido.total };
+    return {
+      id: pedido.id,
+      numeroPedido: pedido.numero,
+      status: pedido.status,
+      total: pedido.total,
+      checkoutUrl: checkout.checkoutUrl,
+    };
   }
 
   private normalizarCep(cep: unknown) {

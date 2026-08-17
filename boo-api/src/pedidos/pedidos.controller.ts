@@ -8,6 +8,14 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class PedidosController {
   constructor(private readonly pedidosService: PedidosService) {}
 
+  private origemPublica(req: any) {
+    const origem = String(req.get?.('origin') || '').trim();
+    if (origem) return origem;
+    const protocolo = String(req.get?.('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
+    const host = String(req.get?.('x-forwarded-host') || req.get?.('host') || '').split(',')[0].trim();
+    return `${protocolo}://${host}`;
+  }
+
   @Post()
   @UseGuards(JwtAuthGuard)
   criar(
@@ -23,7 +31,7 @@ export class PedidosController {
     },
     @Req() req: any,
   ) {
-    return this.pedidosService.criar(body, req.user.id);
+    return this.pedidosService.criar(body, req.user.id, this.origemPublica(req));
   }
 
   @Get()

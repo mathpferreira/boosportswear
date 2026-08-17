@@ -171,10 +171,12 @@ export default function Loja() {
     nome: "", email: "", telefone: "", cep: "", rua: "", numero: "",
     complemento: "", bairro: "", cidade: "", estado: ""
   });
-  const [formaPagamento, setFormaPagamento] = useState("cartao");
+  const formaPagamento = "infinitepay";
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [erroPedido, setErroPedido] = useState(null);
   const [numeroPedido, setNumeroPedido] = useState(null);
+  const [confirmandoPagamento, setConfirmandoPagamento] = useState(false);
+  const [erroRetornoPagamento, setErroRetornoPagamento] = useState(null);
   const [codigoCupom, setCodigoCupom] = useState("");
   const [cupomAplicado, setCupomAplicado] = useState(null);
   const [erroCupom, setErroCupom] = useState(null);
@@ -445,6 +447,58 @@ export default function Loja() {
       }
     }
     carregarConfiguracoes();
+  }, []);
+
+  useEffect(() => {
+    const parametros = new URLSearchParams(window.location.search);
+    if (parametros.get('pagamento') !== 'retorno') return;
+
+    const confirmarPagamento = async () => {
+      const token = obterToken();
+      if (!token) {
+        setErroRetornoPagamento('Entre novamente na sua conta para confirmar o pagamento.');
+        setVisaoAtual('carrinho');
+        return;
+      }
+
+      setConfirmandoPagamento(true);
+      setErroRetornoPagamento(null);
+      setVisaoAtual('carrinho');
+      setEtapaSacola('confirmando');
+
+      try {
+        const resposta = await fetch(`${API_URL}/pagamentos/infinitepay/confirmar`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            order_nsu: parametros.get('order_nsu'),
+            transaction_nsu: parametros.get('transaction_nsu'),
+            slug: parametros.get('slug'),
+            receipt_url: parametros.get('receipt_url'),
+            capture_method: parametros.get('capture_method'),
+          }),
+        });
+        const dados = await resposta.json().catch(() => null);
+        if (!resposta.ok) throw new Error(dados?.message || 'Nao foi possivel confirmar o pagamento.');
+        if (!dados?.pago) throw new Error('O pagamento ainda nao foi confirmado pela InfinitePay.');
+
+        setNumeroPedido(dados.numeroPedido || dados.pedidoId || '—');
+        setCarrinho([]);
+        setCupomAplicado(null);
+        setCodigoCupom('');
+        setEtapaSacola('confirmado');
+        window.history.replaceState({}, '', '/');
+      } catch (erro) {
+        setErroRetornoPagamento(erro.message);
+      } finally {
+        setConfirmandoPagamento(false);
+      }
+    };
+
+    confirmarPagamento();
   }, []);
 
   const categorias = useMemo(() => {
@@ -799,7 +853,9 @@ export default function Loja() {
 
   const statusLabels = {
     aguardando_pagamento: { texto: "Aguardando Pagamento", cor: "text-amber-600 bg-amber-50" },
+    pendente: { texto: "Pendente", cor: "text-amber-600 bg-amber-50" },
     pago: { texto: "Pago", cor: "text-green-700 bg-green-50" },
+    em_preparacao: { texto: "Em Preparação", cor: "text-violet-700 bg-violet-50" },
     enviado: { texto: "Enviado", cor: "text-blue-700 bg-blue-50" },
     entregue: { texto: "Entregue", cor: "text-zinc-700 bg-zinc-100" },
     cancelado: { texto: "Cancelado", cor: "text-red-700 bg-red-50" }
@@ -831,14 +887,11 @@ export default function Loja() {
         throw new Error(erroApi?.message || "Falha ao processar pedido");
       }
       const dados = await resposta.json();
-      setNumeroPedido(dados.numeroPedido || dados.id || "—");
-      setCarrinho([]);
-      setCupomAplicado(null);
-      setCodigoCupom("");
-      setEtapaSacola("confirmado");
+      if (!dados.checkoutUrl) throw new Error('A InfinitePay nao retornou o link de pagamento.');
+      window.location.assign(dados.checkoutUrl);
     } catch (erro) {
       console.error(erro);
-      setErroPedido("Não foi possível concluir o pedido agora. Tente novamente.");
+      setErroPedido(erro.message || "Não foi possível abrir o pagamento agora. Tente novamente.");
     } finally {
       setEnviandoPedido(false);
     }
@@ -1477,14 +1530,25 @@ export default function Loja() {
           {visaoAtual === 'carrinho' && (
             <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 animate-slideUpFade">
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-8 border-b border-zinc-100 pb-4">
-                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-wider">{etapaSacola === "carrinho" ? "Sua Sacola" : etapaSacola === "checkout" ? "Finalizar Pedido" : "Sucesso!"}</h2>
+                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-wider">{confirmandoPagamento ? "Confirmando Pagamento" : etapaSacola === "carrinho" ? "Sua Sacola" : etapaSacola === "checkout" ? "Finalizar Pedido" : "Sucesso!"}</h2>
                 <button onClick={() => setVisaoAtual('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors text-left sm:text-right">Continuar Comprando</button>
               </div>
 
-              {numeroPedido ? (
+              {confirmandoPagamento ? (
+                <div className="text-center py-24 animate-fadeIn">
+                  <p className="text-sm font-bold uppercase tracking-widest text-zinc-700">Validando com a InfinitePay...</p>
+                  <p className="text-xs text-zinc-500 mt-3">Não feche esta página.</p>
+                </div>
+              ) : erroRetornoPagamento ? (
+                <div className="text-center py-24 animate-fadeIn">
+                  <h4 className="text-xl font-black uppercase mb-4 text-red-600">Pagamento não confirmado</h4>
+                  <p className="text-sm text-zinc-500 mb-8">{erroRetornoPagamento}</p>
+                  <button onClick={abrirMeusPedidos} className="bg-black text-white px-8 py-3 rounded text-xs font-bold uppercase tracking-widest hover:bg-zinc-800 transition-colors">Ver meus pedidos</button>
+                </div>
+              ) : numeroPedido ? (
                 <div className="text-center py-20 bg-zinc-50 rounded-lg animate-fadeIn">
-                  <h4 className="text-2xl font-black uppercase mb-4 text-green-700">Pedido nº {numeroPedido} Realizado!</h4>
-                  <p className="text-sm text-zinc-500 mb-8">Acompanhe os detalhes pelo seu e-mail.</p>
+                  <h4 className="text-2xl font-black uppercase mb-4 text-green-700">Pagamento confirmado</h4>
+                  <p className="text-sm text-zinc-500 mb-8">Pedido nº {numeroPedido} recebido e aguardando preparação.</p>
                   <button onClick={reiniciarSacola} className="bg-black text-white px-8 py-3 rounded text-xs font-bold uppercase tracking-widest hover:bg-zinc-800 transition-colors">Voltar para a Loja</button>
                 </div>
               ) : carrinho.length === 0 ? (
@@ -1526,11 +1590,10 @@ export default function Loja() {
                           <div><label className={labelClasses}>Cidade</label><input required value={dadosEntrega.cidade} onChange={handleChangeEntrega("cidade")} className={inputClasses} /></div>
                           <div><label className={labelClasses}>Estado (UF)</label><input required value={dadosEntrega.estado} onChange={handleChangeEntrega("estado")} className={inputClasses} /></div>
                         </div>
-                        <h3 className="font-bold uppercase border-b pb-2 mt-8 mb-4">Pagamento</h3>
-                        <div className="flex gap-2">
-                          {[{ id: "cartao", label: "Cartão de Crédito" }, { id: "pix", label: "Pix" }].map(op => (
-                            <button type="button" key={op.id} onClick={() => setFormaPagamento(op.id)} className={`flex-1 border rounded px-3 py-4 text-xs font-bold uppercase tracking-widest cursor-pointer transition-colors ${formaPagamento === op.id ? "border-black bg-black text-white" : "border-zinc-200 text-zinc-700 hover:border-black"}`}>{op.label}</button>
-                          ))}
+                        <h3 className="font-bold uppercase border-b pb-2 mt-8 mb-4">Pagamento seguro</h3>
+                        <div className="border border-zinc-200 rounded-lg px-4 py-4">
+                          <p className="text-xs font-bold uppercase tracking-widest text-zinc-900">Pix ou cartão de crédito</p>
+                          <p className="text-[11px] text-zinc-500 mt-1">Escolha a forma de pagamento no ambiente seguro da InfinitePay.</p>
                         </div>
                       </form>
                     )}
@@ -1592,7 +1655,7 @@ export default function Loja() {
                       <button onClick={irParaEntrega} className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors">Ir para a Entrega</button>
                     ) : (
                       <div className="space-y-3">
-                        <button type="submit" form="form-checkout" disabled={enviandoPedido} className="w-full bg-green-700 text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-green-800 transition-colors disabled:opacity-50">{enviandoPedido ? "Processando..." : "Confirmar Pedido"}</button>
+                        <button type="submit" form="form-checkout" disabled={enviandoPedido} className="w-full bg-green-700 text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-green-800 transition-colors disabled:opacity-50">{enviandoPedido ? "Abrindo pagamento..." : "Ir para o pagamento"}</button>
                         <button type="button" onClick={() => setEtapaSacola("carrinho")} className="w-full text-xs font-bold text-zinc-500 uppercase hover:text-black transition-colors">Voltar à Sacola</button>
                       </div>
                     )}
@@ -1948,7 +2011,7 @@ export default function Loja() {
 
                             <div className="flex justify-between text-xs pt-3 border-t border-zinc-200">
                               <span className="text-zinc-500 uppercase font-bold">Forma de Pagamento</span>
-                              <span className="font-bold uppercase">{pedido.formaPagamento === "pix" ? "Pix" : "Cartão de Crédito"}</span>
+                              <span className="font-bold uppercase">{pedido.formaPagamento === "pix" ? "Pix" : pedido.formaPagamento === "cartao" ? "Cartão de Crédito" : "InfinitePay"}</span>
                             </div>
                           </div>
                         )}

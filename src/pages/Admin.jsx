@@ -65,8 +65,10 @@ export default function Admin() {
   const [termoBuscaPedido, setTermoBuscaPedido] = useState("");
 
   const STATUS_PEDIDO = [
+    { valor: "aguardando_pagamento", label: "Aguardando pagamento", cor: "bg-amber-100 text-amber-700" },
     { valor: "pendente", label: "Pendente", cor: "bg-amber-100 text-amber-700" },
     { valor: "pago", label: "Pago", cor: "bg-blue-100 text-blue-700" },
+    { valor: "em_preparacao", label: "Em preparação", cor: "bg-violet-100 text-violet-700" },
     { valor: "enviado", label: "Enviado", cor: "bg-indigo-100 text-indigo-700" },
     { valor: "entregue", label: "Entregue", cor: "bg-emerald-100 text-emerald-700" },
     { valor: "cancelado", label: "Cancelado", cor: "bg-red-100 text-red-700" },

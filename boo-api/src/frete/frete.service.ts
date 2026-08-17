@@ -10,6 +10,17 @@ type ItemFrete = {
 @Injectable()
 export class FreteService {
   private readonly logger = new Logger(FreteService.name);
+  private readonly cidadesMotoboy = new Set([
+    'sao paulo', 'aruja', 'barueri', 'biritiba mirim', 'caieiras', 'cajamar',
+    'carapicuiba', 'cotia', 'diadema', 'embu das artes', 'embu guacu',
+    'ferraz de vasconcelos', 'francisco morato', 'franco da rocha', 'guararema',
+    'guarulhos', 'itapecerica da serra', 'itapevi', 'itaquaquecetuba', 'jandira',
+    'juquitiba', 'mairipora', 'maua', 'mogi das cruzes', 'osasco',
+    'pirapora do bom jesus', 'poa', 'ribeirao pires', 'rio grande da serra',
+    'salesopolis', 'santa isabel', 'santana de parnaiba', 'santo andre',
+    'sao bernardo do campo', 'sao caetano do sul', 'suzano', 'taboao da serra',
+    'vargem grande paulista',
+  ]);
 
   private somenteNumeros(valor: unknown) {
     return String(valor || '').replace(/\D/g, '');
@@ -20,6 +31,46 @@ export class FreteService {
     return Number.isFinite(numero) && numero > 0 ? numero : padrao;
   }
 
+  private normalizarCidade(valor: unknown) {
+    return String(valor || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z\s]/g, '')
+      .trim();
+  }
+
+  private async validarDestinoMotoboy(cep: string) {
+    const cepLimpo = this.somenteNumeros(cep);
+    if (cepLimpo.length !== 8) throw new BadRequestException('Informe um CEP valido.');
+
+    let resposta: Response;
+    try {
+      resposta = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(6000),
+      });
+    } catch (erro: any) {
+      this.logger.error(`Falha ao validar CEP do motoboy: ${erro?.message || erro}`);
+      throw new BadGatewayException('Nao foi possivel validar a area do motoboy.');
+    }
+
+    const destino = await resposta.json().catch(() => null);
+    const cidade = this.normalizarCidade(destino?.localidade);
+    if (!resposta.ok || destino?.erro || destino?.uf !== 'SP' || !this.cidadesMotoboy.has(cidade)) {
+      throw new BadRequestException('Motoboy disponivel apenas para a capital e Grande Sao Paulo.');
+    }
+
+    return {
+      codigo: 'motoboy',
+      nome: 'Motoboy no mesmo dia',
+      valor: 0,
+      valorPendente: true,
+      cobranca: 'a_combinar_pelo_instagram',
+      prazo: 'Mesmo dia, conforme disponibilidade',
+    };
+  }
+
   async cotar(dados: { cep: string; subtotal: number; itens: ItemFrete[] }) {
     const opcoes = await this.obterOpcoes(dados);
     return { opcoes };
@@ -28,6 +79,10 @@ export class FreteService {
   async validarOpcao(dados: { cep: string; subtotal: number; itens: ItemFrete[] }, freteEscolhido: any) {
     const codigo = String(freteEscolhido?.codigo || '').trim();
     if (!codigo) throw new BadRequestException('Escolha uma modalidade de frete antes de finalizar.');
+
+    if (codigo === 'motoboy') {
+      return this.validarDestinoMotoboy(dados.cep);
+    }
 
     const opcoes = await this.obterOpcoes(dados);
     const opcao = opcoes.find((item) => String(item.codigo) === codigo);

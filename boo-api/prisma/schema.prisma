@@ -61,6 +61,7 @@ model Pedido {
   entrega        Json     @default("{}")
   formaPagamento String
   frete          Json?
+  pagamento      Json?
   total          Float
   status         String   @default("aguardando_pagamento")
   criadoEm       DateTime @default(now())
