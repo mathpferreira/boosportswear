@@ -866,11 +866,18 @@ export default function Loja() {
     setEnviandoPedido(true);
     setErroPedido(null);
     try {
+      const token = obterToken();
+      if (!token) {
+        setErroLogin('Entre na sua conta para continuar o pagamento.');
+        setIsLoginAberto(true);
+        throw new Error('Entre novamente na sua conta para continuar.');
+      }
+
       const resposta = await fetch(`${API_URL}/pedidos`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem('token') || localStorage.getItem('@BOO:token')}`,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           itens: carrinho,
@@ -884,6 +891,16 @@ export default function Loja() {
       });
       if (!resposta.ok) {
         const erroApi = await resposta.json().catch(() => null);
+        if (resposta.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('usuario');
+          localStorage.removeItem('@BOO:token');
+          localStorage.removeItem('@BOO:usuario');
+          setUsuarioLogado(null);
+          setErroLogin('Sua sessão expirou. Entre novamente para continuar o pagamento.');
+          setIsLoginAberto(true);
+          throw new Error('Sua sessão expirou. Faça login novamente; sua sacola foi preservada.');
+        }
         throw new Error(erroApi?.message || "Falha ao processar pedido");
       }
       const dados = await resposta.json();
