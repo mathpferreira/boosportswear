@@ -177,6 +177,8 @@ export default function Loja() {
   const [numeroPedido, setNumeroPedido] = useState(null);
   const [confirmandoPagamento, setConfirmandoPagamento] = useState(false);
   const [erroRetornoPagamento, setErroRetornoPagamento] = useState(null);
+  const [buscandoCepEntrega, setBuscandoCepEntrega] = useState(false);
+  const [erroCepEntrega, setErroCepEntrega] = useState(null);
   const [codigoCupom, setCodigoCupom] = useState("");
   const [cupomAplicado, setCupomAplicado] = useState(null);
   const [erroCupom, setErroCupom] = useState(null);
@@ -639,8 +641,8 @@ export default function Loja() {
     }
   };
 
-  const calcularFreteConfiguradoNovo = async () => {
-    const cepLimpo = cep.replace(/\D/g, '');
+  const calcularFreteConfiguradoNovo = async (cepInformado = cep) => {
+    const cepLimpo = String(cepInformado || '').replace(/\D/g, '');
     if (cepLimpo.length !== 8) {
       setDestinoFreteInfo(null);
       setFreteResultado({ erro: 'Informe um CEP valido.' });
@@ -707,6 +709,7 @@ export default function Loja() {
       return;
     }
     if (usuarioLogado) {
+      const cepEntregaInicial = dadosEntrega.cep || dadosConta.enderecoPadrao?.cep || '';
       setDadosEntrega(prev => ({
         ...prev,
         nome: prev.nome || usuarioLogado.nome || "",
@@ -720,12 +723,70 @@ export default function Loja() {
         cidade: prev.cidade || dadosConta.enderecoPadrao?.cidade || "",
         estado: prev.estado || dadosConta.enderecoPadrao?.estado || ""
       }));
+
+      const cepEntregaLimpo = String(cepEntregaInicial).replace(/\D/g, '');
+      if (cepEntregaLimpo.length === 8) {
+        const cepFormatado = formatarCep(cepEntregaLimpo);
+        setCep(cepFormatado);
+        calcularFreteConfiguradoNovo(cepEntregaLimpo);
+      } else {
+        setCep('');
+        setDestinoFreteInfo(null);
+        setFreteResultado(null);
+      }
     }
     setEtapaSacola("checkout");
   };
 
   const handleChangeEntrega = (campo) => (e) => {
     setDadosEntrega(prev => ({ ...prev, [campo]: e.target.value }));
+  };
+
+  const formatarCep = (valor) => {
+    const numeros = String(valor || '').replace(/\D/g, '').slice(0, 8);
+    return numeros.length > 5 ? `${numeros.slice(0, 5)}-${numeros.slice(5)}` : numeros;
+  };
+
+  const alterarCepEntrega = (e) => {
+    const cepFormatado = formatarCep(e.target.value);
+    setDadosEntrega(prev => ({ ...prev, cep: cepFormatado }));
+    setCep(cepFormatado);
+    setDestinoFreteInfo(null);
+    setFreteResultado(null);
+    setErroCepEntrega(null);
+    setErroPedido(null);
+  };
+
+  const preencherCepEntrega = async () => {
+    const cepLimpo = String(dadosEntrega.cep || '').replace(/\D/g, '');
+    if (cepLimpo.length !== 8) {
+      setErroCepEntrega('Informe um CEP válido.');
+      return;
+    }
+
+    setBuscandoCepEntrega(true);
+    setErroCepEntrega(null);
+    try {
+      const endereco = await buscarEnderecoPorCep(cepLimpo);
+      if (!endereco) throw new Error('CEP não encontrado.');
+
+      const cepFormatado = formatarCep(endereco.cep);
+      setDadosEntrega(prev => ({
+        ...prev,
+        cep: cepFormatado,
+        rua: endereco.rua || '',
+        bairro: endereco.bairro || '',
+        cidade: endereco.cidade || '',
+        estado: endereco.estado || '',
+      }));
+      setCep(cepFormatado);
+      await calcularFreteConfiguradoNovo(cepLimpo);
+    } catch (erro) {
+      setFreteResultado(null);
+      setErroCepEntrega(erro.message || 'Não foi possível consultar este CEP.');
+    } finally {
+      setBuscandoCepEntrega(false);
+    }
   };
 
   const preencherCepConta = async () => {
@@ -866,6 +927,13 @@ export default function Loja() {
     setEnviandoPedido(true);
     setErroPedido(null);
     try {
+      if (String(dadosEntrega.cep || '').replace(/\D/g, '').length !== 8) {
+        throw new Error('Informe e consulte o CEP de entrega antes de continuar.');
+      }
+      if (!freteResultado?.codigo) {
+        throw new Error('Consulte o CEP para escolher a entrega antes do pagamento.');
+      }
+
       const token = obterToken();
       if (!token) {
         setErroLogin('Entre na sua conta para continuar o pagamento.');
@@ -1480,7 +1548,7 @@ export default function Loja() {
                           }}
                           className={inputClasses}
                         />
-                        <button type="button" onClick={calcularFreteConfiguradoNovo} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
+                        <button type="button" onClick={() => calcularFreteConfiguradoNovo()} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
                       </div>
                       {freteResultado && (
                         <div className="mt-3 text-xs animate-fadeIn">
@@ -1598,6 +1666,28 @@ export default function Loja() {
                           <div><label className={labelClasses}>E-mail</label><input type="email" required value={dadosEntrega.email} onChange={handleChangeEntrega("email")} className={inputClasses} /></div>
                           <div><label className={labelClasses}>Telefone</label><input required value={dadosEntrega.telefone} onChange={handleChangeEntrega("telefone")} className={inputClasses} /></div>
                         </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className={labelClasses}>CEP</label>
+                            <div className="flex gap-2">
+                              <input
+                                required
+                                inputMode="numeric"
+                                autoComplete="postal-code"
+                                maxLength={9}
+                                placeholder="00000-000"
+                                value={dadosEntrega.cep}
+                                onChange={alterarCepEntrega}
+                                className={`${inputClasses} min-w-0 flex-1`}
+                              />
+                              <button type="button" onClick={preencherCepEntrega} disabled={buscandoCepEntrega} className="shrink-0 bg-black text-white px-5 rounded text-[10px] font-bold uppercase tracking-wider disabled:opacity-50">
+                                {buscandoCepEntrega ? 'Buscando' : 'Buscar'}
+                              </button>
+                            </div>
+                            {erroCepEntrega && <p className="text-[10px] font-bold uppercase text-red-500 mt-2">{erroCepEntrega}</p>}
+                          </div>
+                          <div><label className={labelClasses}>Complemento</label><input value={dadosEntrega.complemento} onChange={handleChangeEntrega("complemento")} className={inputClasses} placeholder="Opcional" /></div>
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="col-span-2"><label className={labelClasses}>Rua / Endereço</label><input required value={dadosEntrega.rua} onChange={handleChangeEntrega("rua")} className={inputClasses} /></div>
                           <div><label className={labelClasses}>Número</label><input required value={dadosEntrega.numero} onChange={handleChangeEntrega("numero")} className={inputClasses} /></div>
@@ -1659,6 +1749,23 @@ export default function Loja() {
                             : 'Calcule no produto'}
                         </span>
                       </div>
+                      {freteResultado?.carregando && <p className="text-[10px] font-bold uppercase text-zinc-400">Calculando entrega...</p>}
+                      {freteResultado?.erro && <p className="text-[10px] font-bold uppercase text-red-500">{freteResultado.erro}</p>}
+                      {freteResultado?.codigo !== 'motoboy' && opcoesFreteExibidas.length > 1 && (
+                        <div className="space-y-2">
+                          {opcoesFreteExibidas.map((opcao) => (
+                            <button
+                              key={`checkout-${opcao.codigo}`}
+                              type="button"
+                              onClick={() => setFreteResultado({ ...opcao, opcoes: opcoesFreteExibidas })}
+                              className={`w-full flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left ${opcao.codigo === freteResultado?.codigo ? 'border-black bg-zinc-50' : 'border-zinc-200'}`}
+                            >
+                              <span><strong className="block text-xs text-zinc-900">{opcao.nome}</strong><small className="text-[10px] text-zinc-500">{opcao.prazo}</small></span>
+                              <strong className="text-xs text-green-700">R$ {Number(opcao.valor).toFixed(2).replace('.', ',')}</strong>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <div className="flex justify-between gap-4 text-lg font-black pt-3 border-t border-zinc-200">
                         <span>Total</span>
                         <span className="text-right">
