@@ -9,8 +9,6 @@ export class PedidosController {
   constructor(private readonly pedidosService: PedidosService) {}
 
   private origemPublica(req: any) {
-    const origem = String(req.get?.('origin') || '').trim();
-    if (origem) return origem;
     const protocolo = String(req.get?.('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
     const host = String(req.get?.('x-forwarded-host') || req.get?.('host') || '').split(',')[0].trim();
     return `${protocolo}://${host}`;
@@ -57,5 +55,10 @@ export class MeusPedidosController {
   @Get()
   meusPedidos(@Req() req: any) {
     return this.pedidosService.listarPorUsuario(req.user.id);
+  }
+
+  @Patch(':id/cancelar')
+  cancelar(@Param('id') id: string, @Req() req: any) {
+    return this.pedidosService.cancelar(id, 'cliente', req.user.id);
   }
 }

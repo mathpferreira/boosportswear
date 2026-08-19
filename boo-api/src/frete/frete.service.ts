@@ -40,7 +40,7 @@ export class FreteService {
       .trim();
   }
 
-  private async validarDestinoMotoboy(cep: string) {
+  private async consultarCep(cep: string) {
     const cepLimpo = this.somenteNumeros(cep);
     if (cepLimpo.length !== 8) throw new BadRequestException('Informe um CEP valido.');
 
@@ -56,8 +56,45 @@ export class FreteService {
     }
 
     const destino = await resposta.json().catch(() => null);
-    const cidade = this.normalizarCidade(destino?.localidade);
-    if (!resposta.ok || destino?.erro || destino?.uf !== 'SP' || !this.cidadesMotoboy.has(cidade)) {
+    if (!resposta.ok || destino?.erro || !destino?.uf || !destino?.localidade) {
+      throw new BadRequestException('CEP de entrega nao encontrado.');
+    }
+
+    return {
+      cep: cepLimpo,
+      rua: String(destino.logradouro || '').trim(),
+      bairro: String(destino.bairro || '').trim(),
+      cidade: String(destino.localidade || '').trim(),
+      estado: String(destino.uf || '').trim().toUpperCase(),
+    };
+  }
+
+  async validarEnderecoEntrega(entrega: Record<string, any>) {
+    const destino = await this.consultarCep(entrega?.cep);
+    const cidadeInformada = this.normalizarCidade(entrega?.cidade);
+    const estadoInformado = String(entrega?.estado || '').trim().toUpperCase();
+
+    if (estadoInformado && estadoInformado !== destino.estado) {
+      throw new BadRequestException('O estado informado nao corresponde ao CEP de entrega.');
+    }
+    if (cidadeInformada && cidadeInformada !== this.normalizarCidade(destino.cidade)) {
+      throw new BadRequestException('A cidade informada nao corresponde ao CEP de entrega.');
+    }
+
+    return {
+      ...entrega,
+      cep: destino.cep,
+      rua: String(entrega?.rua || destino.rua).trim(),
+      bairro: String(entrega?.bairro || destino.bairro).trim(),
+      cidade: destino.cidade,
+      estado: destino.estado,
+    };
+  }
+
+  private async validarDestinoMotoboy(cep: string) {
+    const destino = await this.consultarCep(cep);
+    const cidade = this.normalizarCidade(destino.cidade);
+    if (destino.estado !== 'SP' || !this.cidadesMotoboy.has(cidade)) {
       throw new BadRequestException('Motoboy disponivel apenas para a capital e Grande Sao Paulo.');
     }
 

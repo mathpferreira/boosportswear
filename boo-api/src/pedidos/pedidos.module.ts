@@ -5,9 +5,10 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CuponsModule } from '../cupons/cupons.module';
 import { FreteModule } from '../frete/frete.module';
 import { PagamentosModule } from '../pagamentos/pagamentos.module';
+import { EmailsModule } from '../emails/emails.module';
 
 @Module({
-  imports: [CuponsModule, FreteModule, PagamentosModule],
+  imports: [CuponsModule, FreteModule, PagamentosModule, EmailsModule],
   controllers: [PedidosController, MeusPedidosController],
   providers: [PedidosService, PrismaService],
 })

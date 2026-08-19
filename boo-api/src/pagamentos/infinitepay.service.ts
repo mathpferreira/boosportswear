@@ -6,7 +6,9 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { EmailsService } from '../emails/emails.service';
 
 type CriarCheckoutInput = {
   orderNsu: string;
@@ -29,7 +31,10 @@ export class InfinitePayService {
   private readonly logger = new Logger(InfinitePayService.name);
   private readonly apiUrl = 'https://api.checkout.infinitepay.io';
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailsService: EmailsService,
+  ) {}
 
   private get handle() {
     return process.env.INFINITEPAY_HANDLE?.trim() || 'gabriel-batista-zzu';
@@ -58,6 +63,15 @@ export class InfinitePayService {
     const numeros = String(telefone || '').replace(/\D/g, '');
     if (!numeros) return undefined;
     return `+${numeros.startsWith('55') ? numeros : `55${numeros}`}`;
+  }
+
+  private urlHttps(valor: unknown) {
+    try {
+      const url = new URL(String(valor || ''));
+      return url.protocol === 'https:' ? url.toString() : null;
+    } catch {
+      return null;
+    }
   }
 
   async criarCheckout(input: CriarCheckoutInput) {
@@ -181,29 +195,69 @@ export class InfinitePayService {
     }
 
     const captura = String(verificacao.capture_method || input.capture_method || '').toLowerCase();
-    const formaPagamento = captura === 'pix' ? 'pix' : captura === 'credit_card' ? 'cartao' : pedido.formaPagamento;
-    const pagamentoAtual = pedido.pagamento && typeof pedido.pagamento === 'object' && !Array.isArray(pedido.pagamento)
-      ? pedido.pagamento as Record<string, any>
-      : {};
-    const statusProtegidos = ['em_preparacao', 'enviado', 'entregue'];
-    const proximoStatus = statusProtegidos.includes(pedido.status) ? pedido.status : 'pago';
+    const registrarPagamento = () => this.prisma.$transaction(async (tx) => {
+      const pedidoAtual = await tx.pedido.findUnique({ where: { id: pedido.id } });
+      if (!pedidoAtual) throw new NotFoundException('Pedido nao encontrado.');
 
-    const atualizado = await this.prisma.pedido.update({
-      where: { id: pedido.id },
-      data: {
-        status: proximoStatus,
-        formaPagamento,
-        pagamento: {
-          ...pagamentoAtual,
-          status: 'pago',
-          slug,
-          transactionNsu,
-          captureMethod: captura || null,
-          receiptUrl: input.receipt_url || verificacao.receipt_url || null,
-          pagoEm: new Date().toISOString(),
+      const formaPagamento = captura === 'pix'
+        ? 'pix'
+        : captura === 'credit_card' ? 'cartao' : pedidoAtual.formaPagamento;
+      const pagamentoAtual = pedidoAtual.pagamento
+        && typeof pedidoAtual.pagamento === 'object'
+        && !Array.isArray(pedidoAtual.pagamento)
+        ? pedidoAtual.pagamento as Record<string, any>
+        : {};
+      const jaEstavaPago = ['pago', 'pago_apos_cancelamento'].includes(String(pagamentoAtual.status || ''));
+      const pagamentoAposCancelamento = pedidoAtual.status === 'cancelado' || pedidoAtual.estoqueRestaurado;
+      const statusProtegidos = ['em_preparacao', 'enviado', 'entregue'];
+      const proximoStatus = pagamentoAposCancelamento
+        ? 'pagamento_apos_cancelamento'
+        : statusProtegidos.includes(pedidoAtual.status) ? pedidoAtual.status : 'pago';
+
+      const atualizado = await tx.pedido.update({
+        where: { id: pedidoAtual.id },
+        data: {
+          status: proximoStatus,
+          formaPagamento,
+          pagamento: {
+            ...pagamentoAtual,
+            status: pagamentoAposCancelamento ? 'pago_apos_cancelamento' : 'pago',
+            slug,
+            transactionNsu,
+            captureMethod: captura || null,
+            receiptUrl: this.urlHttps(verificacao.receipt_url || input.receipt_url),
+            pagoEm: new Date().toISOString(),
+          },
         },
-      },
-    });
+      });
+
+      return { atualizado, jaEstavaPago, pagamentoAposCancelamento };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    let resultado: Awaited<ReturnType<typeof registrarPagamento>> | null = null;
+    for (let tentativa = 1; tentativa <= 3; tentativa += 1) {
+      try {
+        resultado = await registrarPagamento();
+        break;
+      } catch (erro: any) {
+        if (erro?.code !== 'P2034' || tentativa === 3) throw erro;
+        this.logger.warn(`Conflito ao confirmar o pedido ${pedido.id}; repetindo a transacao (${tentativa}/3).`);
+      }
+    }
+    if (!resultado) throw new BadGatewayException('Nao foi possivel registrar o pagamento agora.');
+
+    const { atualizado, jaEstavaPago, pagamentoAposCancelamento } = resultado;
+
+    if (!jaEstavaPago) {
+      if (pagamentoAposCancelamento) {
+        void this.emailsService.pagamentoAposCancelamento(atualizado);
+      } else {
+        void Promise.allSettled([
+          this.emailsService.pagamentoConfirmado(atualizado),
+          this.emailsService.novoPedidoPagoAdmin(atualizado),
+        ]);
+      }
+    }
 
     return { pago: true, pedidoId: atualizado.id, numeroPedido: atualizado.numero, status: atualizado.status };
   }

@@ -72,7 +72,18 @@ export default function Admin() {
     { valor: "enviado", label: "Enviado", cor: "bg-indigo-100 text-indigo-700" },
     { valor: "entregue", label: "Entregue", cor: "bg-emerald-100 text-emerald-700" },
     { valor: "cancelado", label: "Cancelado", cor: "bg-red-100 text-red-700" },
+    { valor: "pagamento_apos_cancelamento", label: "Pagamento após cancelamento", cor: "bg-red-200 text-red-900" },
   ];
+  const TRANSICOES_STATUS_PEDIDO = {
+    aguardando_pagamento: ["cancelado"],
+    pendente: ["cancelado"],
+    pago: ["em_preparacao", "cancelado"],
+    em_preparacao: ["enviado", "cancelado"],
+    enviado: ["entregue"],
+    entregue: [],
+    cancelado: [],
+    pagamento_apos_cancelamento: [],
+  };
 
   // Categorias
   const [categorias, setCategorias] = useState([]);
@@ -210,6 +221,11 @@ const normalizarTamanho = (label = "") =>
 
   // Atualiza o status de um pedido (ex: pendente -> pago -> enviado -> entregue)
   const atualizarStatusPedido = async (pedidoId, novoStatus) => {
+    const pedidoAtual = pedidos.find(p => p.id === pedidoId);
+    if (novoStatus === 'cancelado' && ['pago', 'em_preparacao'].includes(pedidoAtual?.status)) {
+      const confirmou = window.confirm('Este pedido já foi pago. O estoque voltará, mas o estorno precisa ser feito manualmente no app InfinitePay. Continuar?');
+      if (!confirmou) return;
+    }
     try {
       const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
       const res = await fetch(`${API_URL}/pedidos/${pedidoId}/status`, {
@@ -217,14 +233,16 @@ const normalizarTamanho = (label = "") =>
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ status: novoStatus })
       });
+      const dados = await res.json().catch(() => null);
       if (res.ok) {
-        setPedidos(prev => prev.map(p => p.id === pedidoId ? { ...p, status: novoStatus } : p));
+        const statusAtualizado = dados?.status || novoStatus;
+        setPedidos(prev => prev.map(p => p.id === pedidoId ? { ...p, ...dados, status: statusAtualizado } : p));
         if (pedidoSelecionado?.id === pedidoId) {
-          setPedidoSelecionado(prev => ({ ...prev, status: novoStatus }));
+          setPedidoSelecionado(prev => ({ ...prev, ...dados, status: statusAtualizado }));
         }
-        dispararToast("Status do pedido atualizado!");
+        dispararToast(dados?.avisoEstorno || "Status do pedido atualizado!");
       } else {
-        dispararToast("Erro ao atualizar status do pedido.", "erro");
+        dispararToast(dados?.message || "Erro ao atualizar status do pedido.", "erro");
       }
     } catch (e) {
       console.error(e);
@@ -809,6 +827,11 @@ const handleFileUpload = async (e) => {
 
   const statusInfo = (statusValor) =>
     STATUS_PEDIDO.find(s => s.valor === statusValor) || { label: statusValor || "—", cor: "bg-zinc-100 text-zinc-600" };
+
+  const opcoesStatusPedido = (pedido) => {
+    const valores = [pedido.status, ...(TRANSICOES_STATUS_PEDIDO[pedido.status] || [])];
+    return STATUS_PEDIDO.filter((status) => valores.includes(status.valor));
+  };
 
   // Métricas para o Dashboard (Home)
   const pedidosPendentes = pedidos.filter(p => ["aguardando_pagamento", "pendente"].includes(p.status)).length;
@@ -1665,7 +1688,7 @@ const handleFileUpload = async (e) => {
                         onChange={(e) => atualizarStatusPedido(pedidoSelecionado.id, e.target.value)}
                         className="w-full appearance-none border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30 cursor-pointer"
                       >
-                        {STATUS_PEDIDO.map(s => (
+                        {opcoesStatusPedido(pedidoSelecionado).map(s => (
                           <option key={s.valor} value={s.valor}>{s.label}</option>
                         ))}
                       </select>

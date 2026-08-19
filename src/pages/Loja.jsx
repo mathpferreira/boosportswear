@@ -143,6 +143,17 @@ export default function Loja() {
   const [cep, setCep] = useState("");
   const [freteResultado, setFreteResultado] = useState(null);
   const [destinoFreteInfo, setDestinoFreteInfo] = useState(null);
+  const cotacaoFreteRef = useRef(0);
+  const consultaCepEntregaRef = useRef(0);
+  const timerCepProdutoRef = useRef(null);
+  const timerCepEntregaRef = useRef(null);
+
+  useEffect(() => () => {
+    clearTimeout(timerCepProdutoRef.current);
+    clearTimeout(timerCepEntregaRef.current);
+    cotacaoFreteRef.current += 1;
+    consultaCepEntregaRef.current += 1;
+  }, []);
 
   // Catálogo — filtro e busca
   const [categoriaAtiva, setCategoriaAtiva] = useState("Todos");
@@ -486,6 +497,9 @@ export default function Loja() {
         const dados = await resposta.json().catch(() => null);
         if (!resposta.ok) throw new Error(dados?.message || 'Nao foi possivel confirmar o pagamento.');
         if (!dados?.pago) throw new Error('O pagamento ainda nao foi confirmado pela InfinitePay.');
+        if (dados.status === 'pagamento_apos_cancelamento') {
+          throw new Error('O pagamento foi recebido depois que a reserva expirou. Não pague novamente; a equipe da BOO irá validar a disponibilidade ou realizar o estorno.');
+        }
 
         setNumeroPedido(dados.numeroPedido || dados.pedidoId || '—');
         setCarrinho([]);
@@ -577,11 +591,17 @@ export default function Loja() {
       }
       return [...prev, { ...item, quantidade: 1 }];
     });
+    cotacaoFreteRef.current += 1;
+    setFreteResultado(null);
+    setDestinoFreteInfo(null);
     setMiniCarrinhoAberto(true);
   };
 
   const removerDoCarrinho = (cartId) => {
     setCarrinho(prev => prev.filter(item => item.cartId !== cartId));
+    cotacaoFreteRef.current += 1;
+    setFreteResultado(null);
+    setDestinoFreteInfo(null);
   };
 
   const buscarEnderecoPorCep = async (cepInformado) => {
@@ -609,47 +629,17 @@ export default function Loja() {
   const descontoCupom = cupomAplicado?.descontoAplicado || 0;
   const totalComFrete = Math.max(totalCarrinho - descontoCupom, 0) + (freteResultado?.valor || 0);
 
-  const calcularFreteConfigurado = async () => {
-    const cepLimpo = cep.replace(/\D/g, '');
-    if (cepLimpo.length !== 8) {
-      setFreteResultado({ erro: 'Informe um CEP válido.' });
-      return;
-    }
-
-    setFreteResultado({ carregando: true });
-    const itensCotacao = carrinho.length > 0
-      ? carrinho
-      : produtoSelecionado ? [{ ...produtoSelecionado, quantidade: 1 }] : [];
-    const subtotalCotacao = itensCotacao.reduce((total, item) => total + Number(item.preco || 0) * Number(item.quantidade || 1), 0);
-
-    try {
-      const resposta = await fetch(`${API_URL}/frete/cotar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cep: cepLimpo,
-          subtotal: subtotalCotacao,
-          itens: itensCotacao.map((item) => ({ id: item.id, nome: item.nome, preco: item.preco, quantidade: item.quantidade || 1 })),
-        }),
-      });
-      const dados = await resposta.json();
-      if (!resposta.ok) throw new Error(dados.message || 'Não foi possível calcular o frete.');
-      const melhorOpcao = dados.opcoes?.[0];
-      setFreteResultado(melhorOpcao ? { ...melhorOpcao, opcoes: dados.opcoes } : { erro: 'Nenhum frete disponível para este CEP.' });
-    } catch (erro) {
-      setFreteResultado({ erro: erro.message });
-    }
-  };
-
-  const calcularFreteConfiguradoNovo = async (cepInformado = cep) => {
+  const calcularFrete = async (cepInformado = cep) => {
     const cepLimpo = String(cepInformado || '').replace(/\D/g, '');
     if (cepLimpo.length !== 8) {
+      cotacaoFreteRef.current += 1;
       setDestinoFreteInfo(null);
       setFreteResultado({ erro: 'Informe um CEP valido.' });
       return;
     }
 
-    setFreteResultado({ carregando: true });
+    const idCotacao = ++cotacaoFreteRef.current;
+    setFreteResultado({ carregando: true, cepDestino: cepLimpo });
     const itensCotacao = carrinho.length > 0
       ? carrinho
       : produtoSelecionado ? [{ ...produtoSelecionado, quantidade: 1 }] : [];
@@ -657,6 +647,7 @@ export default function Loja() {
 
     try {
       const destinoInfo = await buscarEnderecoPorCep(cepLimpo);
+      if (idCotacao !== cotacaoFreteRef.current) return;
       setDestinoFreteInfo(destinoInfo);
 
       if (!destinoInfo) {
@@ -671,8 +662,11 @@ export default function Loja() {
         setFreteResultado({
           codigo: 'motoboy',
           nome: 'Motoboy no mesmo dia',
+          valor: 0,
+          valorPendente: true,
           prazo: 'A combinar pelo Instagram',
           opcoes: [],
+          cepDestino: cepLimpo,
         });
         return;
       }
@@ -688,17 +682,20 @@ export default function Loja() {
       });
 
       const dados = await resposta.json();
+      if (idCotacao !== cotacaoFreteRef.current) return;
       if (!resposta.ok) throw new Error(dados.message || 'Nao foi possivel calcular o frete.');
 
       const opcoesFiltradas = (dados.opcoes || []).filter((opcao) => !isJadlogPackage(opcao));
       const melhorOpcao = opcoesFiltradas[0];
       setFreteResultado(
         melhorOpcao
-          ? { ...melhorOpcao, opcoes: opcoesFiltradas }
-          : { erro: 'Nenhuma modalidade disponivel para este CEP no momento.' }
+          ? { ...melhorOpcao, opcoes: opcoesFiltradas, cepDestino: cepLimpo }
+          : { erro: 'Nenhuma modalidade disponivel para este CEP no momento.', cepDestino: cepLimpo }
       );
     } catch (erro) {
-      setFreteResultado({ erro: erro.message });
+      if (idCotacao === cotacaoFreteRef.current) {
+        setFreteResultado({ erro: erro.message, cepDestino: cepLimpo });
+      }
     }
   };
 
@@ -709,13 +706,18 @@ export default function Loja() {
       return;
     }
     if (usuarioLogado) {
-      const cepEntregaInicial = dadosEntrega.cep || dadosConta.enderecoPadrao?.cep || '';
+      const cepProduto = String(cep || '').replace(/\D/g, '');
+      const cepEntregaInicial = cepProduto.length === 8
+        ? cepProduto
+        : dadosEntrega.cep || dadosConta.enderecoPadrao?.cep || '';
+      const cepEntregaLimpo = String(cepEntregaInicial).replace(/\D/g, '');
+      const cepFormatado = formatarCep(cepEntregaLimpo);
       setDadosEntrega(prev => ({
         ...prev,
         nome: prev.nome || usuarioLogado.nome || "",
         email: prev.email || usuarioLogado.email || "",
         telefone: prev.telefone || dadosConta.telefone || "",
-        cep: prev.cep || dadosConta.enderecoPadrao?.cep || "",
+        cep: cepFormatado,
         rua: prev.rua || dadosConta.enderecoPadrao?.rua || "",
         numero: prev.numero || dadosConta.enderecoPadrao?.numero || "",
         complemento: prev.complemento || dadosConta.enderecoPadrao?.complemento || "",
@@ -724,11 +726,10 @@ export default function Loja() {
         estado: prev.estado || dadosConta.enderecoPadrao?.estado || ""
       }));
 
-      const cepEntregaLimpo = String(cepEntregaInicial).replace(/\D/g, '');
       if (cepEntregaLimpo.length === 8) {
-        const cepFormatado = formatarCep(cepEntregaLimpo);
         setCep(cepFormatado);
-        calcularFreteConfiguradoNovo(cepEntregaLimpo);
+        clearTimeout(timerCepEntregaRef.current);
+        void preencherCepEntrega(cepEntregaLimpo);
       } else {
         setCep('');
         setDestinoFreteInfo(null);
@@ -749,25 +750,34 @@ export default function Loja() {
 
   const alterarCepEntrega = (e) => {
     const cepFormatado = formatarCep(e.target.value);
+    const cepLimpo = cepFormatado.replace(/\D/g, '');
+    clearTimeout(timerCepEntregaRef.current);
+    cotacaoFreteRef.current += 1;
+    consultaCepEntregaRef.current += 1;
     setDadosEntrega(prev => ({ ...prev, cep: cepFormatado }));
     setCep(cepFormatado);
     setDestinoFreteInfo(null);
     setFreteResultado(null);
     setErroCepEntrega(null);
     setErroPedido(null);
+    if (cepLimpo.length === 8) {
+      timerCepEntregaRef.current = setTimeout(() => preencherCepEntrega(cepLimpo), 400);
+    }
   };
 
-  const preencherCepEntrega = async () => {
-    const cepLimpo = String(dadosEntrega.cep || '').replace(/\D/g, '');
+  const preencherCepEntrega = async (cepInformado = dadosEntrega.cep) => {
+    const cepLimpo = String(cepInformado || '').replace(/\D/g, '');
     if (cepLimpo.length !== 8) {
       setErroCepEntrega('Informe um CEP válido.');
       return;
     }
 
+    const idConsulta = ++consultaCepEntregaRef.current;
     setBuscandoCepEntrega(true);
     setErroCepEntrega(null);
     try {
       const endereco = await buscarEnderecoPorCep(cepLimpo);
+      if (idConsulta !== consultaCepEntregaRef.current) return;
       if (!endereco) throw new Error('CEP não encontrado.');
 
       const cepFormatado = formatarCep(endereco.cep);
@@ -780,12 +790,14 @@ export default function Loja() {
         estado: endereco.estado || '',
       }));
       setCep(cepFormatado);
-      await calcularFreteConfiguradoNovo(cepLimpo);
+      await calcularFrete(cepLimpo);
     } catch (erro) {
-      setFreteResultado(null);
-      setErroCepEntrega(erro.message || 'Não foi possível consultar este CEP.');
+      if (idConsulta === consultaCepEntregaRef.current) {
+        setFreteResultado(null);
+        setErroCepEntrega(erro.message || 'Não foi possível consultar este CEP.');
+      }
     } finally {
-      setBuscandoCepEntrega(false);
+      if (idConsulta === consultaCepEntregaRef.current) setBuscandoCepEntrega(false);
     }
   };
 
@@ -847,6 +859,21 @@ export default function Loja() {
       setErroPedidos("Erro de conexão ao buscar seus pedidos.");
     } finally {
       setCarregandoPedidos(false);
+    }
+  };
+
+  const cancelarMeuPedido = async (pedido) => {
+    if (!window.confirm(`Cancelar o pedido #${pedido.numero}? O estoque reservado será liberado.`)) return;
+    try {
+      const resposta = await fetch(`${API_URL}/meus-pedidos/${pedido.id}/cancelar`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${obterToken()}` },
+      });
+      const dados = await resposta.json().catch(() => null);
+      if (!resposta.ok) throw new Error(dados?.message || 'Não foi possível cancelar o pedido.');
+      setMeusPedidos(prev => prev.map(item => item.id === pedido.id ? { ...item, ...dados } : item));
+    } catch (erro) {
+      window.alert(erro.message || 'Não foi possível cancelar o pedido.');
     }
   };
 
@@ -919,7 +946,8 @@ export default function Loja() {
     em_preparacao: { texto: "Em Preparação", cor: "text-violet-700 bg-violet-50" },
     enviado: { texto: "Enviado", cor: "text-blue-700 bg-blue-50" },
     entregue: { texto: "Entregue", cor: "text-zinc-700 bg-zinc-100" },
-    cancelado: { texto: "Cancelado", cor: "text-red-700 bg-red-50" }
+    cancelado: { texto: "Cancelado", cor: "text-red-700 bg-red-50" },
+    pagamento_apos_cancelamento: { texto: "Pagamento após cancelamento", cor: "text-red-700 bg-red-50" }
   };
 
   const finalizarPedido = async (e) => {
@@ -932,6 +960,13 @@ export default function Loja() {
       }
       if (!freteResultado?.codigo) {
         throw new Error('Consulte o CEP para escolher a entrega antes do pagamento.');
+      }
+      if (freteResultado.carregando) {
+        throw new Error('Aguarde o cálculo do frete terminar.');
+      }
+      const cepEntregaLimpo = String(dadosEntrega.cep || '').replace(/\D/g, '');
+      if (String(freteResultado.cepDestino || '') !== cepEntregaLimpo) {
+        throw new Error('O CEP de entrega mudou. Aguarde o novo cálculo do frete.');
       }
 
       const token = obterToken();
@@ -1539,16 +1574,25 @@ export default function Loja() {
                        <div className="flex flex-col sm:flex-row gap-2 max-w-sm">
                         <input
                           type="text"
+                          inputMode="numeric"
+                          autoComplete="postal-code"
+                          maxLength={9}
                           placeholder="00000-000"
                           value={cep}
                           onChange={(e) => {
-                            setCep(e.target.value);
+                            const cepFormatado = formatarCep(e.target.value);
+                            const cepLimpo = cepFormatado.replace(/\D/g, '');
+                            clearTimeout(timerCepProdutoRef.current);
+                            cotacaoFreteRef.current += 1;
+                            setCep(cepFormatado);
                             setDestinoFreteInfo(null);
                             setFreteResultado(null);
+                            if (cepLimpo.length === 8) {
+                              timerCepProdutoRef.current = setTimeout(() => calcularFrete(cepLimpo), 400);
+                            }
                           }}
                           className={inputClasses}
                         />
-                        <button type="button" onClick={() => calcularFreteConfiguradoNovo()} className="bg-black text-white hover:bg-zinc-800 px-6 py-2 rounded text-xs font-bold uppercase cursor-pointer transition-colors">OK</button>
                       </div>
                       {freteResultado && (
                         <div className="mt-3 text-xs animate-fadeIn">
@@ -1568,18 +1612,18 @@ export default function Loja() {
                                     <strong className="block text-zinc-900">Motoboy no mesmo dia</strong>
                                     <small className="text-zinc-500">Consulte pelo Instagram</small>
                                   </span>
-                                  <strong className="shrink-0 text-green-700">A combinar</strong>
+                                  <strong className="shrink-0 text-zinc-900">A combinar</strong>
                                 </a>
                               )}
                               {!entregaMotoDisponivel && opcoesFreteExibidas.map((opcao) => (
                                 <button
                                   key={`${opcao.codigo || opcao.nome}-${opcao.valor}`}
                                   type="button"
-                                  onClick={() => setFreteResultado({ ...opcao, opcoes: opcoesFreteExibidas })}
+                                  onClick={() => setFreteResultado({ ...opcao, opcoes: opcoesFreteExibidas, cepDestino: freteResultado?.cepDestino })}
                                   className={`w-full flex items-center justify-between gap-3 rounded-lg px-3 py-3 text-left border ${opcao.codigo === freteResultado.codigo ? 'border-black bg-zinc-50' : 'border-zinc-200'}`}
                                 >
                                   <span><strong className="block text-zinc-900">{opcao.nome}</strong><small className="text-zinc-500">{opcao.prazo}</small></span>
-                                  <strong className="text-green-700">R$ {opcao.valor.toFixed(2).replace('.', ',')}</strong>
+                                  <strong className="text-zinc-900">R$ {opcao.valor.toFixed(2).replace('.', ',')}</strong>
                                 </button>
                               ))}
                             </div>
@@ -1626,13 +1670,13 @@ export default function Loja() {
                 </div>
               ) : erroRetornoPagamento ? (
                 <div className="text-center py-24 animate-fadeIn">
-                  <h4 className="text-xl font-black uppercase mb-4 text-red-600">Pagamento não confirmado</h4>
+                  <h4 className="text-xl font-black uppercase mb-4 text-red-600">Verificação do pagamento</h4>
                   <p className="text-sm text-zinc-500 mb-8">{erroRetornoPagamento}</p>
                   <button onClick={abrirMeusPedidos} className="bg-black text-white px-8 py-3 rounded text-xs font-bold uppercase tracking-widest hover:bg-zinc-800 transition-colors">Ver meus pedidos</button>
                 </div>
               ) : numeroPedido ? (
                 <div className="text-center py-20 bg-zinc-50 rounded-lg animate-fadeIn">
-                  <h4 className="text-2xl font-black uppercase mb-4 text-green-700">Pagamento confirmado</h4>
+                  <h4 className="text-2xl font-black uppercase mb-4 text-zinc-900">Pagamento confirmado</h4>
                   <p className="text-sm text-zinc-500 mb-8">Pedido nº {numeroPedido} recebido e aguardando preparação.</p>
                   <button onClick={reiniciarSacola} className="bg-black text-white px-8 py-3 rounded text-xs font-bold uppercase tracking-widest hover:bg-zinc-800 transition-colors">Voltar para a Loja</button>
                 </div>
@@ -1680,10 +1724,8 @@ export default function Loja() {
                                 onChange={alterarCepEntrega}
                                 className={`${inputClasses} min-w-0 flex-1`}
                               />
-                              <button type="button" onClick={preencherCepEntrega} disabled={buscandoCepEntrega} className="shrink-0 bg-black text-white px-5 rounded text-[10px] font-bold uppercase tracking-wider disabled:opacity-50">
-                                {buscandoCepEntrega ? 'Buscando' : 'Buscar'}
-                              </button>
                             </div>
+                            {buscandoCepEntrega && <p className="text-[10px] font-bold uppercase text-zinc-400 mt-2">Buscando endereço e frete...</p>}
                             {erroCepEntrega && <p className="text-[10px] font-bold uppercase text-red-500 mt-2">{erroCepEntrega}</p>}
                           </div>
                           <div><label className={labelClasses}>Complemento</label><input value={dadosEntrega.complemento} onChange={handleChangeEntrega("complemento")} className={inputClasses} placeholder="Opcional" /></div>
@@ -1718,7 +1760,7 @@ export default function Loja() {
                               <span className="font-bold">{cupomAplicado.codigo}</span>
                               <button onClick={removerCupom} className="text-[10px] font-bold uppercase text-red-500 hover:underline">Remover</button>
                             </div>
-                            <div className="flex justify-between text-sm text-green-700">
+                            <div className="flex justify-between text-sm text-zinc-700">
                               <span>Desconto aplicado</span>
                               <span>- R$ {descontoCupom.toFixed(2).replace('.', ',')}</span>
                             </div>
@@ -1738,7 +1780,7 @@ export default function Loja() {
                         )}
                         {erroCupom && <p className="text-[10px] font-bold uppercase text-red-500">{erroCupom}</p>}
                       </div>
-                      {cupomAplicado && <div className="flex justify-between text-sm text-green-700"><span>Desconto</span><span>- R$ {descontoCupom.toFixed(2).replace('.', ',')}</span></div>}
+                      {cupomAplicado && <div className="flex justify-between text-sm text-zinc-700"><span>Desconto</span><span>- R$ {descontoCupom.toFixed(2).replace('.', ',')}</span></div>}
                       <div className="flex justify-between text-sm text-zinc-600">
                         <span>Frete</span>
                         <span>
@@ -1757,11 +1799,11 @@ export default function Loja() {
                             <button
                               key={`checkout-${opcao.codigo}`}
                               type="button"
-                              onClick={() => setFreteResultado({ ...opcao, opcoes: opcoesFreteExibidas })}
+                              onClick={() => setFreteResultado({ ...opcao, opcoes: opcoesFreteExibidas, cepDestino: freteResultado?.cepDestino })}
                               className={`w-full flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left ${opcao.codigo === freteResultado?.codigo ? 'border-black bg-zinc-50' : 'border-zinc-200'}`}
                             >
                               <span><strong className="block text-xs text-zinc-900">{opcao.nome}</strong><small className="text-[10px] text-zinc-500">{opcao.prazo}</small></span>
-                              <strong className="text-xs text-green-700">R$ {Number(opcao.valor).toFixed(2).replace('.', ',')}</strong>
+                              <strong className="text-xs text-zinc-900">R$ {Number(opcao.valor).toFixed(2).replace('.', ',')}</strong>
                             </button>
                           ))}
                         </div>
@@ -1779,7 +1821,7 @@ export default function Loja() {
                       <button onClick={irParaEntrega} className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors">Ir para a Entrega</button>
                     ) : (
                       <div className="space-y-3">
-                        <button type="submit" form="form-checkout" disabled={enviandoPedido} className="w-full bg-green-700 text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-green-800 transition-colors disabled:opacity-50">{enviandoPedido ? "Abrindo pagamento..." : "Ir para o pagamento"}</button>
+                        <button type="submit" form="form-checkout" disabled={enviandoPedido || buscandoCepEntrega || freteResultado?.carregando || !freteResultado?.codigo} className="w-full bg-black text-white py-4 rounded text-xs font-bold tracking-widest uppercase hover:bg-zinc-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">{enviandoPedido ? "Abrindo pagamento..." : freteResultado?.carregando || buscandoCepEntrega ? "Calculando frete..." : "Ir para o pagamento"}</button>
                         <button type="button" onClick={() => setEtapaSacola("carrinho")} className="w-full text-xs font-bold text-zinc-500 uppercase hover:text-black transition-colors">Voltar à Sacola</button>
                       </div>
                     )}
@@ -2137,6 +2179,19 @@ export default function Loja() {
                               <span className="text-zinc-500 uppercase font-bold">Forma de Pagamento</span>
                               <span className="font-bold uppercase">{pedido.formaPagamento === "pix" ? "Pix" : pedido.formaPagamento === "cartao" ? "Cartão de Crédito" : "InfinitePay"}</span>
                             </div>
+                            {pedido.status === 'aguardando_pagamento' && pedido.expiraEmPagamento && (
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+                                Estoque reservado até {new Date(pedido.expiraEmPagamento).toLocaleString('pt-BR')}
+                              </p>
+                            )}
+                            {pedido.status === 'aguardando_pagamento' && (
+                              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                                {pedido.pagamento?.checkoutUrl && (
+                                  <a href={pedido.pagamento.checkoutUrl} className="flex-1 bg-black text-white px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider">Continuar pagamento</a>
+                                )}
+                                <button onClick={() => cancelarMeuPedido(pedido)} className="flex-1 border border-zinc-300 px-4 py-3 text-[10px] font-bold uppercase tracking-wider hover:border-black">Cancelar pedido</button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>

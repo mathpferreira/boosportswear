@@ -62,8 +62,11 @@ model Pedido {
   formaPagamento String
   frete          Json?
   pagamento      Json?
+  cupom          Json?
   total          Float
   status         String   @default("aguardando_pagamento")
+  expiraEmPagamento DateTime?
+  estoqueRestaurado Boolean @default(false)
   criadoEm       DateTime @default(now())
   atualizadoEm   DateTime @updatedAt
 }
