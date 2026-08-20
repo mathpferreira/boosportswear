@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 
 @Injectable()
 export class EmailsService {
@@ -29,10 +29,12 @@ export class EmailsService {
     return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
-  private async enviar(para: string, assunto: string, html: string) {
+  private async solicitarEnvio(para: string, assunto: string, html: string) {
     const apiKey = process.env.RESEND_API_KEY?.trim();
     const remetente = process.env.EMAIL_FROM?.trim();
-    if (!apiKey || !remetente || !para) return false;
+    if (!apiKey) return { sucesso: false, erro: 'RESEND_API_KEY nao configurada.' };
+    if (!remetente) return { sucesso: false, erro: 'EMAIL_FROM nao configurado.' };
+    if (!para) return { sucesso: false, erro: 'Destinatario nao informado.' };
 
     try {
       const resposta = await fetch('https://api.resend.com/emails', {
@@ -45,15 +47,49 @@ export class EmailsService {
         body: JSON.stringify({ from: remetente, to: [para], subject: assunto, html }),
         signal: AbortSignal.timeout(10000),
       });
+      const corpo = await resposta.text();
       if (!resposta.ok) {
-        this.logger.error(`Resend recusou o e-mail (${resposta.status}): ${(await resposta.text()).slice(0, 500)}`);
-        return false;
+        return {
+          sucesso: false,
+          erro: `Resend recusou o e-mail (${resposta.status}): ${corpo.slice(0, 500)}`,
+        };
       }
-      return true;
+      let id: string | undefined;
+      try {
+        id = JSON.parse(corpo)?.id;
+      } catch {
+        id = undefined;
+      }
+      return { sucesso: true, id };
     } catch (erro: any) {
-      this.logger.error(`Falha ao enviar e-mail: ${erro?.message || erro}`);
-      return false;
+      return { sucesso: false, erro: `Falha ao enviar e-mail: ${erro?.message || erro}` };
     }
+  }
+
+  private async enviar(para: string, assunto: string, html: string) {
+    const resultado = await this.solicitarEnvio(para, assunto, html);
+    if (!resultado.sucesso) this.logger.error(resultado.erro);
+    return resultado.sucesso;
+  }
+
+  async enviarTeste(para?: string) {
+    const destinatario = String(para || process.env.EMAIL_ADMIN || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(destinatario)) {
+      throw new BadRequestException('Informe um e-mail de teste valido.');
+    }
+
+    const conteudo = '<p style="font-size:14px;line-height:1.6">O envio de e-mails da loja esta configurado e respondendo corretamente.</p><p style="font-size:14px;line-height:1.6">Este teste nao altera pedidos, pagamentos ou estoque.</p>';
+    const resultado = await this.solicitarEnvio(
+      destinatario,
+      'Teste de e-mail - BOO Sportwear',
+      this.template('Teste de e-mail concluido', 'Administracao', conteudo),
+    );
+    if (!resultado.sucesso) {
+      this.logger.error(resultado.erro);
+      throw new ServiceUnavailableException(resultado.erro);
+    }
+
+    return { sucesso: true, destinatario, id: resultado.id || null };
   }
 
   async pedidoAguardando(pedido: any, checkoutUrl: string) {

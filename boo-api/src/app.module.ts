@@ -11,9 +11,10 @@ import { MinhaContaModule } from './minha-conta/minha-conta.module';
 import { CuponsModule } from './cupons/cupons.module';
 import { FreteModule } from './frete/frete.module';
 import { PagamentosModule } from './pagamentos/pagamentos.module';
+import { EmailsModule } from './emails/emails.module';
 
 @Module({
-  imports: [AuthModule, ProdutosModule, CategoriasModule, UsersModule, ConfiguracoesModule, PedidosModule, MinhaContaModule, CuponsModule, FreteModule, PagamentosModule],
+  imports: [AuthModule, ProdutosModule, CategoriasModule, UsersModule, ConfiguracoesModule, PedidosModule, MinhaContaModule, CuponsModule, FreteModule, PagamentosModule, EmailsModule],
   controllers: [AppController],
   providers: [AppService],
 })

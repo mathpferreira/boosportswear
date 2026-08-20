@@ -22,7 +22,8 @@ import {
   FiUsers,
   FiShield,
   FiMoreVertical,
-  FiArrowLeft
+  FiArrowLeft,
+  FiMail
 } from 'react-icons/fi';
 
 export default function Admin() {
@@ -125,6 +126,8 @@ export default function Admin() {
       prazo: "3 a 5 dias úteis"
     }
   });
+  const [emailTeste, setEmailTeste] = useState("");
+  const [enviandoEmailTeste, setEnviandoEmailTeste] = useState(false);
 
 const [toast, setToast] = useState({ show: false, msg: "", tipo: "sucesso" });
 
@@ -769,6 +772,35 @@ const handleFileUpload = async (e) => {
       dispararToast('Não foi possível alterar a visibilidade.', 'erro');
     } finally {
       setMenuProdutoAberto(null);
+    }
+  };
+
+  const enviarEmailTeste = async () => {
+    if (!emailTeste.trim()) {
+      dispararToast("Informe o e-mail que recebera o teste.", "erro");
+      return;
+    }
+
+    setEnviandoEmailTeste(true);
+    try {
+      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/admin/emails/teste`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ email: emailTeste.trim() })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Nao foi possivel enviar o teste.');
+
+      registrarLogAcao('Administracao Boo', `Enviou um e-mail de teste para ${emailTeste.trim()}`);
+      dispararToast(`E-mail de teste enviado para ${data.destinatario}.`);
+    } catch (erro) {
+      dispararToast(erro.message || "Falha ao testar o envio de e-mail.", "erro");
+    } finally {
+      setEnviandoEmailTeste(false);
     }
   };
 
@@ -2093,6 +2125,33 @@ const handleFileUpload = async (e) => {
                   className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30"
                   required 
                 />
+              </div>
+
+              <div className="border-t border-zinc-100 pt-6 space-y-3">
+                <div className="flex items-start gap-3">
+                  <FiMail className="mt-0.5 text-zinc-500" size={18} />
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-900">Testar envio de e-mail</p>
+                    <p className="text-xs text-zinc-500 mt-1">Valida o Resend e o remetente sem criar ou alterar pedidos.</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3">
+                  <input
+                    type="email"
+                    value={emailTeste}
+                    onChange={(e) => setEmailTeste(e.target.value)}
+                    placeholder="E-mail que recebera o teste"
+                    className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={enviarEmailTeste}
+                    disabled={enviandoEmailTeste}
+                    className="bg-zinc-900 text-white px-5 py-3 rounded-lg text-xs font-semibold tracking-wider uppercase hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    {enviandoEmailTeste ? 'Enviando...' : 'Enviar teste'}
+                  </button>
+                </div>
               </div>
 
               <div className="border-t border-zinc-100 pt-6 space-y-4">
