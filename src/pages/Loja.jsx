@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useEffectEvent, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   FiUser, FiSearch, FiShoppingBag, FiMenu, FiX,
@@ -7,8 +7,24 @@ import {
 } from 'react-icons/fi';
 
 import AuthCard from "../components/AuthCard";
-import { API_URL } from "../config/api";
+import {
+  API_URL,
+  apiFetch,
+  encerrarSessao,
+  limparTokensLegados,
+  obterUsuarioSalvo,
+  salvarUsuario,
+} from "../config/api";
 import logo from "../assets/logo.png";
+
+const visaoPelaRota = (pathname = window.location.pathname) => {
+  const visoesPorRota = {
+    '/carrinho': 'carrinho',
+    '/minha-conta': 'conta',
+    '/meus-pedidos': 'pedidos',
+  };
+  return visoesPorRota[pathname] || (pathname.startsWith('/produto/') ? 'produto' : 'home');
+};
 
 // COMPONENTE: Card do Produto
 function CardProduto({ produto, onAbrir }) {
@@ -23,8 +39,6 @@ function CardProduto({ produto, onAbrir }) {
       timer = setInterval(() => {
         setImgIndex((prev) => (prev + 1) % fotos.length);
       }, 1200);
-    } else {
-      setImgIndex(0);
     }
     return () => clearInterval(timer);
   }, [isHovered, fotos.length]);
@@ -33,7 +47,10 @@ function CardProduto({ produto, onAbrir }) {
     <div 
       className="group cursor-pointer flex flex-col justify-between h-full"
       onMouseEnter={() => setIsHovered(true)} 
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        setImgIndex(0);
+      }}
     >
       <div 
         onClick={() => onAbrir(produto)} 
@@ -87,7 +104,6 @@ function Reveal({ children, className = '' }) {
 
 // COMPONENTE PRINCIPAL: Loja
 export default function Loja() {
-  const obterToken = () => localStorage.getItem('token') || localStorage.getItem('@BOO:token');
   const { slugId: produtoSlugRota } = useParams();
   const [produtosBrazilian, setProdutosBrazilian] = useState([]);
   const cidadesEntregaMoto = useMemo(() => new Set([
@@ -132,13 +148,20 @@ export default function Loja() {
   ]), []);
   
   // Controle de visão
-  const [visaoAtual, setVisaoAtual] = useState('home'); 
+  const [visaoAtual, setVisaoAtual] = useState(() => visaoPelaRota());
 
   const [produtoSelecionado, setProdutoSelecionado] = useState(null);
   const [tamanhoEscolhido, setTamanhoEscolhido] = useState("M");
   const [indiceImagemModal, setIndiceImagemModal] = useState(0);
   
-  const [carrinho, setCarrinho] = useState([]);
+  const [carrinho, setCarrinho] = useState(() => {
+    try {
+      const salvo = JSON.parse(localStorage.getItem('@BOO:carrinho') || '[]');
+      return Array.isArray(salvo) ? salvo : [];
+    } catch {
+      return [];
+    }
+  });
   const [etapaSacola, setEtapaSacola] = useState("carrinho");
   const [cep, setCep] = useState("");
   const [freteResultado, setFreteResultado] = useState(null);
@@ -172,7 +195,7 @@ export default function Loja() {
   const [emailLogin, setEmailLogin] = useState("");
   const [senhaLogin, setSenhaLogin] = useState("");
   const [aceitouTermosLogin, setAceitouTermosLogin] = useState(false);
-  const [usuarioLogado, setUsuarioLogado] = useState(null);
+  const [usuarioLogado, setUsuarioLogado] = useState(() => obterUsuarioSalvo());
   const [erroLogin, setErroLogin] = useState(null);
   const [carregandoLogin, setCarregandoLogin] = useState(false);
   const [avisoConta, setAvisoConta] = useState(null);
@@ -206,6 +229,7 @@ export default function Loja() {
   const [dadosConta, setDadosConta] = useState({
     nome: "",
     email: "",
+    emailVerificado: false,
     telefone: "",
     enderecoPadrao: {
       cep: "",
@@ -217,13 +241,13 @@ export default function Loja() {
       estado: ""
     },
     preferenciasConta: {
-      novidadesEmail: true,
-      statusPedidoWhatsApp: true,
+      novidadesEmail: false,
       statusPedidoEmail: true
     }
   });
   const [salvandoConta, setSalvandoConta] = useState(false);
   const [mensagemConta, setMensagemConta] = useState(null);
+  const [senhaAtualConta, setSenhaAtualConta] = useState('');
 
   // Configurações da Loja
   const [configLoja, setConfigLoja] = useState({
@@ -231,6 +255,7 @@ export default function Loja() {
     instagramUrl: "https://instagram.com/boosportwear",
     emailSuporte: "contato@boosportswear.com.br",
     lojaAberta: true,
+    termsVersion: '2026-08-20',
     frete: {
       ativo: true,
       valorBase: 19.9,
@@ -238,8 +263,6 @@ export default function Loja() {
       prazo: "3 a 5 dias úteis"
     }
   });
-
-  const TAMANHOS_PADRAO = ["P", "M", "G", "U"];
 
   const slugificarProduto = (texto = "") =>
     texto
@@ -270,8 +293,12 @@ export default function Loja() {
     const cepLimpo = cep.replace(/\D/g, '');
     const uf = String(destinoFreteInfo?.estado || '').toUpperCase();
     const cidadeNormalizada = normalizarCidade(destinoFreteInfo?.cidade || '');
-    return cepLimpo.length === 8 && uf === 'SP' && cidadesEntregaMoto.has(cidadeNormalizada);
-  }, [cep, cidadesEntregaMoto, destinoFreteInfo]);
+    return configLoja.frete?.ativo !== false &&
+      configLoja.frete?.motoboyAtivo !== false &&
+      cepLimpo.length === 8 &&
+      uf === 'SP' &&
+      cidadesEntregaMoto.has(cidadeNormalizada);
+  }, [cep, cidadesEntregaMoto, configLoja.frete?.ativo, configLoja.frete?.motoboyAtivo, destinoFreteInfo]);
 
   const opcoesFreteExibidas = useMemo(() => {
     const opcoes = freteResultado?.opcoes || (freteResultado?.valor !== undefined ? [freteResultado] : []);
@@ -284,25 +311,62 @@ export default function Loja() {
     return partes[partes.length - 1] || "";
   };
 
-  // 1. CARREGAR USUÁRIO SALVO (Mantém logado ao dar F5)
+  const selecionarProdutoDaRota = useEffectEvent((produtos = produtosBrazilian) => {
+    const produtoIdRota = extrairIdDaRotaProduto(produtoSlugRota);
+    if (!produtoIdRota) return;
+    const produto = produtos.find((item) => item.id === produtoIdRota);
+    if (!produto) return;
+    setProdutoSelecionado(produto);
+    const tamanhos = Array.isArray(produto.tamanhos) ? produto.tamanhos : [];
+    const primeiroDisponivel = tamanhos.find((item) => Number(item.estoque || 0) > 0);
+    setTamanhoEscolhido(normalizarTamanho(primeiroDisponivel?.label || 'U'));
+    setIndiceImagemModal(0);
+    setVisaoAtual('produto');
+  });
+
+  // O perfil salvo acelera a primeira pintura; o servidor continua sendo a fonte de verdade.
   useEffect(() => {
-    const usuarioSalvo = localStorage.getItem('usuario') || localStorage.getItem('@BOO:usuario');
-    if (usuarioSalvo) {
-      setUsuarioLogado(JSON.parse(usuarioSalvo));
-    }
+    let cancelado = false;
+    limparTokensLegados();
+    const validarSessao = async () => {
+      try {
+        const resposta = await apiFetch(`${API_URL}/auth/me`);
+        if (cancelado) return;
+        if (!resposta.ok) {
+          salvarUsuario(null);
+          setUsuarioLogado(null);
+          if (['/minha-conta', '/meus-pedidos'].includes(window.location.pathname)) {
+            window.history.replaceState({}, '', '/');
+            setVisaoAtual('home');
+            setIsLoginAberto(true);
+          }
+          return;
+        }
+        const dados = await resposta.json().catch(() => ({}));
+        if (dados.usuario) {
+          salvarUsuario(dados.usuario);
+          setUsuarioLogado(dados.usuario);
+        }
+      } catch {
+        if (cancelado) return;
+        salvarUsuario(null);
+        setUsuarioLogado(null);
+      }
+    };
+    void validarSessao();
+    return () => { cancelado = true; };
   }, []);
 
   useEffect(() => {
-    const hash = window.location.hash.replace('#', '');
-    if (hash === 'conta' || hash === 'pedidos' || hash === 'carrinho') {
-      setVisaoAtual(hash);
-    }
-  }, []);
+    localStorage.setItem('@BOO:carrinho', JSON.stringify(carrinho));
+  }, [carrinho]);
 
   useEffect(() => {
     const handlePopState = () => {
-      const hash = window.location.hash.replace('#', '');
-      setVisaoAtual(hash || 'home');
+      setVisaoAtual(visaoPelaRota());
+      setIsMenuAberto(false);
+      setIsUserMenuAberto(false);
+      selecionarProdutoDaRota();
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -395,39 +459,34 @@ export default function Loja() {
   }, [carrinho]);
 
   const navegarParaVisao = (proximaVisao, { replace = false, produtoId = null, produtoNome = "" } = {}) => {
-    const rotaHash = {
-      home: '',
-      produto: 'produto',
-      carrinho: 'carrinho',
-      conta: 'conta',
-      pedidos: 'pedidos'
+    const rotas = {
+      home: '/',
+      carrinho: '/carrinho',
+      conta: '/minha-conta',
+      pedidos: '/meus-pedidos',
     };
-
-    const proximoHash = rotaHash[proximaVisao] || '';
     const pathname = proximaVisao === 'produto' && produtoId
       ? `/produto/${slugificarProduto(produtoNome || produtoSelecionado?.nome || '') || 'produto'}--${produtoId}`
-      : '/';
-    const novaUrl = `${pathname}${proximoHash && proximaVisao !== 'produto' ? `#${proximoHash}` : ''}`;
+      : rotas[proximaVisao] || '/';
+    const novaUrl = pathname;
     if (replace) {
       window.history.replaceState({ visao: proximaVisao }, '', novaUrl);
     } else {
       window.history.pushState({ visao: proximaVisao }, '', novaUrl);
     }
     setVisaoAtual(proximaVisao);
-  };
-
-  useEffect(() => {
     setIsMenuAberto(false);
     setIsUserMenuAberto(false);
-  }, [visaoAtual]);
+  };
 
   useEffect(() => {
     async function carregarProdutos() {
       try {
-        const resposta = await fetch(`${API_URL}/produtos`);
+        const resposta = await apiFetch(`${API_URL}/produtos`);
         if (resposta.ok) {
           const dados = await resposta.json();
           setProdutosBrazilian(dados);
+          selecionarProdutoDaRota(dados);
         }
       } catch (erro) {
         console.error("Erro ao carregar produtos:", erro);
@@ -437,20 +496,9 @@ export default function Loja() {
   }, []);
 
   useEffect(() => {
-    const produtoIdRota = extrairIdDaRotaProduto(produtoSlugRota);
-    if (!produtoIdRota || produtosBrazilian.length === 0) return;
-    const produto = produtosBrazilian.find((item) => item.id === produtoIdRota);
-    if (!produto) return;
-    setProdutoSelecionado(produto);
-    setTamanhoEscolhido("M");
-    setIndiceImagemModal(0);
-    setVisaoAtual('produto');
-  }, [produtoSlugRota, produtosBrazilian]);
-
-  useEffect(() => {
     async function carregarConfiguracoes() {
       try {
-        const resposta = await fetch(`${API_URL}/configuracoes`);
+        const resposta = await apiFetch(`${API_URL}/configuracoes`);
         if (resposta.ok) {
           const dados = await resposta.json();
           setConfigLoja(prev => ({ ...prev, ...dados }));
@@ -467,25 +515,15 @@ export default function Loja() {
     if (parametros.get('pagamento') !== 'retorno') return;
 
     const confirmarPagamento = async () => {
-      const token = obterToken();
-      if (!token) {
-        setErroRetornoPagamento('Entre novamente na sua conta para confirmar o pagamento.');
-        setVisaoAtual('carrinho');
-        return;
-      }
-
       setConfirmandoPagamento(true);
       setErroRetornoPagamento(null);
       setVisaoAtual('carrinho');
       setEtapaSacola('confirmando');
 
       try {
-        const resposta = await fetch(`${API_URL}/pagamentos/infinitepay/confirmar`, {
+        const resposta = await apiFetch(`${API_URL}/pagamentos/infinitepay/confirmar`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             order_nsu: parametros.get('order_nsu'),
             transaction_nsu: parametros.get('transaction_nsu'),
@@ -567,9 +605,9 @@ export default function Loja() {
     setProdutoSelecionado(produto);
     const tamanhosDisponiveis = Array.isArray(produto.tamanhos) && produto.tamanhos.length > 0
       ? produto.tamanhos.map((tam) => ({ ...tam, label: normalizarTamanho(tam.label) }))
-      : TAMANHOS_PADRAO.map((label) => ({ label, estoque: label === "M" ? 1 : 0 }));
+      : [{ label: "U", estoque: Number(produto.estoque || 0) }];
     const primeiroDisponivel = tamanhosDisponiveis.find((item) => Number(item.estoque || 0) > 0);
-    setTamanhoEscolhido(primeiroDisponivel?.label || "M");
+    setTamanhoEscolhido(primeiroDisponivel?.label || tamanhosDisponiveis[0]?.label || "U");
     setIndiceImagemModal(0);
     navegarParaVisao('produto', { produtoId: produto.id, produtoNome: produto.nome });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -577,6 +615,14 @@ export default function Loja() {
 
   const adicionarAoCarrinho = (produto, tamanho) => {
     if (!configLoja.lojaAberta) return;
+
+    const grade = Array.isArray(produto.tamanhos) && produto.tamanhos.length
+      ? produto.tamanhos
+      : [{ label: "U", estoque: Number(produto.estoque || 0) }];
+    const estoqueDisponivel = Number(
+      grade.find((item) => normalizarTamanho(item.label) === normalizarTamanho(tamanho))?.estoque || 0,
+    );
+    if (estoqueDisponivel <= 0) return;
 
     const item = {
       ...produto,
@@ -587,7 +633,9 @@ export default function Loja() {
     setCarrinho(prev => {
       const existe = prev.find(i => i.cartId === item.cartId);
       if (existe) {
-        return prev.map(i => i.cartId === item.cartId ? { ...i, quantidade: i.quantidade + 1 } : i);
+        return prev.map(i => i.cartId === item.cartId
+          ? { ...i, quantidade: Math.min(Number(i.quantidade || 0) + 1, estoqueDisponivel) }
+          : i);
       }
       return [...prev, { ...item, quantidade: 1 }];
     });
@@ -654,24 +702,7 @@ export default function Loja() {
         throw new Error('CEP nao encontrado. Confira os numeros e tente novamente.');
       }
 
-      const cidadeDestino = normalizarCidade(destinoInfo.cidade || '');
-      const entregaMotoNoDestino = String(destinoInfo.estado || '').toUpperCase() === 'SP'
-        && cidadesEntregaMoto.has(cidadeDestino);
-
-      if (entregaMotoNoDestino) {
-        setFreteResultado({
-          codigo: 'motoboy',
-          nome: 'Motoboy no mesmo dia',
-          valor: 0,
-          valorPendente: true,
-          prazo: 'A combinar pelo Instagram',
-          opcoes: [],
-          cepDestino: cepLimpo,
-        });
-        return;
-      }
-
-      const resposta = await fetch(`${API_URL}/frete/cotar`, {
+      const resposta = await apiFetch(`${API_URL}/frete/cotar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -822,7 +853,7 @@ export default function Loja() {
     setAplicandoCupom(true);
     setErroCupom(null);
     try {
-      const resposta = await fetch(`${API_URL}/cupons/validar?codigo=${encodeURIComponent(codigoCupom.trim())}&subtotal=${totalCarrinho}`);
+      const resposta = await apiFetch(`${API_URL}/cupons/validar?codigo=${encodeURIComponent(codigoCupom.trim())}&subtotal=${totalCarrinho}`);
       const dados = await resposta.json();
       if (!resposta.ok) throw new Error(dados.message || "Cupom inválido.");
       setCupomAplicado(dados);
@@ -844,10 +875,7 @@ export default function Loja() {
     setCarregandoPedidos(true);
     setErroPedidos(null);
     try {
-      const token = obterToken();
-      const resposta = await fetch(`${API_URL}/meus-pedidos`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const resposta = await apiFetch(`${API_URL}/meus-pedidos`);
       if (resposta.ok) {
         const dados = await resposta.json();
         setMeusPedidos(dados);
@@ -865,9 +893,8 @@ export default function Loja() {
   const cancelarMeuPedido = async (pedido) => {
     if (!window.confirm(`Cancelar o pedido #${pedido.numero}? O estoque reservado será liberado.`)) return;
     try {
-      const resposta = await fetch(`${API_URL}/meus-pedidos/${pedido.id}/cancelar`, {
+      const resposta = await apiFetch(`${API_URL}/meus-pedidos/${pedido.id}/cancelar`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${obterToken()}` },
       });
       const dados = await resposta.json().catch(() => null);
       if (!resposta.ok) throw new Error(dados?.message || 'Não foi possível cancelar o pedido.');
@@ -879,15 +906,21 @@ export default function Loja() {
 
   const carregarMinhaConta = async () => {
     try {
-      const token = obterToken();
-      const resposta = await fetch(`${API_URL}/minha-conta`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const resposta = await apiFetch(`${API_URL}/minha-conta`);
       if (resposta.ok) {
         const dados = await resposta.json();
+        const usuarioAtualizado = {
+          ...usuarioLogado,
+          nome: dados.nome || usuarioLogado?.nome,
+          email: dados.email || usuarioLogado?.email,
+          emailVerificado: Boolean(dados.emailVerificado),
+        };
+        setUsuarioLogado(usuarioAtualizado);
+        salvarUsuario(usuarioAtualizado);
         setDadosConta({
           nome: dados.nome || "",
           email: dados.email || "",
+          emailVerificado: Boolean(dados.emailVerificado),
           telefone: dados.telefone || "",
           enderecoPadrao: {
             cep: dados.enderecoPadrao?.cep || "",
@@ -899,8 +932,7 @@ export default function Loja() {
             estado: dados.enderecoPadrao?.estado || ""
           },
           preferenciasConta: {
-            novidadesEmail: dados.preferenciasConta?.novidadesEmail ?? true,
-            statusPedidoWhatsApp: dados.preferenciasConta?.statusPedidoWhatsApp ?? true,
+            novidadesEmail: dados.preferenciasConta?.novidadesEmail ?? false,
             statusPedidoEmail: dados.preferenciasConta?.statusPedidoEmail ?? true
           }
         });
@@ -915,14 +947,17 @@ export default function Loja() {
     setSalvandoConta(true);
     setMensagemConta(null);
     try {
-      const token = obterToken();
-      const resposta = await fetch(`${API_URL}/minha-conta`, {
+      const resposta = await apiFetch(`${API_URL}/minha-conta`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify(dadosConta)
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nome: dadosConta.nome,
+          email: dadosConta.email,
+          telefone: String(dadosConta.telefone || '').replace(/\D/g, ''),
+          enderecoPadrao: dadosConta.enderecoPadrao,
+          preferenciasConta: dadosConta.preferenciasConta,
+          senhaAtual: senhaAtualConta || undefined,
+        })
       });
       const dados = await resposta.json();
       if (!resposta.ok) throw new Error(dados.message || "Erro ao salvar.");
@@ -930,12 +965,31 @@ export default function Loja() {
       setMensagemConta({ tipo: "sucesso", texto: "Dados atualizados com sucesso!" });
       const usuarioAtualizado = { ...usuarioLogado, ...dados };
       setUsuarioLogado(usuarioAtualizado);
-      localStorage.setItem('usuario', JSON.stringify(usuarioAtualizado));
-      localStorage.setItem('@BOO:usuario', JSON.stringify(usuarioAtualizado));
+      salvarUsuario(usuarioAtualizado);
+      setSenhaAtualConta('');
     } catch (erro) {
       setMensagemConta({ tipo: "erro", texto: erro.message });
     } finally {
       setSalvandoConta(false);
+    }
+  };
+
+  const reenviarVerificacaoEmail = async () => {
+    setMensagemConta(null);
+    try {
+      const resposta = await apiFetch(`${API_URL}/auth/reenviar-verificacao`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: dadosConta.email || usuarioLogado?.email }),
+      }, false);
+      const dados = await resposta.json().catch(() => ({}));
+      if (!resposta.ok) throw new Error(dados.message || 'Não foi possível reenviar o e-mail.');
+      setMensagemConta({
+        tipo: 'sucesso',
+        texto: 'Se a conta estiver pendente, um novo link de verificação foi enviado.',
+      });
+    } catch (erro) {
+      setMensagemConta({ tipo: 'erro', texto: erro.message });
     }
   };
 
@@ -969,36 +1023,47 @@ export default function Loja() {
         throw new Error('O CEP de entrega mudou. Aguarde o novo cálculo do frete.');
       }
 
-      const token = obterToken();
-      if (!token) {
+      if (!usuarioLogado) {
         setErroLogin('Entre na sua conta para continuar o pagamento.');
         setIsLoginAberto(true);
         throw new Error('Entre novamente na sua conta para continuar.');
       }
 
-      const resposta = await fetch(`${API_URL}/pedidos`, {
+      if (usuarioLogado.emailVerificado !== true) {
+        navegarParaVisao('conta');
+        throw new Error('Confirme seu e-mail antes de finalizar a compra. Enviamos um link para sua caixa de entrada.');
+      }
+
+      const resposta = await apiFetch(`${API_URL}/pedidos`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          itens: carrinho,
-          entrega: dadosEntrega,
+          itens: carrinho.map((item) => ({
+            id: item.id,
+            tamanhoEscolhido: normalizarTamanho(item.tamanhoEscolhido),
+            quantidade: Number(item.quantidade || 1),
+          })),
+          entrega: {
+            ...dadosEntrega,
+            telefone: String(dadosEntrega.telefone || '').replace(/\D/g, ''),
+          },
           formaPagamento,
-          frete: freteResultado,
-          cupom: cupomAplicado,
-          total: totalComFrete,
-          usuarioId: usuarioLogado?.id || null
+          frete: {
+            codigo: freteResultado.codigo,
+            nome: freteResultado.nome,
+            valor: Number(freteResultado.valor || 0),
+            valorPendente: Boolean(freteResultado.valorPendente),
+            prazo: freteResultado.prazo,
+            cepDestino: freteResultado.cepDestino,
+          },
+          cupom: cupomAplicado?.codigo ? { codigo: cupomAplicado.codigo } : undefined,
         })
       });
       if (!resposta.ok) {
         const erroApi = await resposta.json().catch(() => null);
         if (resposta.status === 401) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('usuario');
-          localStorage.removeItem('@BOO:token');
-          localStorage.removeItem('@BOO:usuario');
+          limparTokensLegados();
+          salvarUsuario(null);
           setUsuarioLogado(null);
           setErroLogin('Sua sessão expirou. Entre novamente para continuar o pagamento.');
           setIsLoginAberto(true);
@@ -1023,31 +1088,40 @@ export default function Loja() {
     navegarParaVisao('home');
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await encerrarSessao();
     setUsuarioLogado(null);
     setIsUserMenuAberto(false);
     setAvisoConta(null);
     setMeusPedidos([]);
     setPedidoExpandido(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('usuario');
-    localStorage.removeItem('@BOO:token');
-    localStorage.removeItem('@BOO:usuario');
   };
 
-  const abrirMinhaConta = async () => {
+  const abrirMinhaConta = () => {
     setMensagemConta(null);
     navegarParaVisao('conta');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    await Promise.allSettled([carregarMinhaConta(), carregarMeusPedidos()]);
   };
 
-  const abrirMeusPedidos = async () => {
+  const abrirMeusPedidos = () => {
     setPedidoExpandido(null);
     navegarParaVisao('pedidos');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    await carregarMeusPedidos();
   };
+
+  const carregarAreaProtegida = useEffectEvent(() => {
+    if (!usuarioLogado?.id) return;
+    if (visaoAtual === 'conta') {
+      void Promise.allSettled([carregarMinhaConta(), carregarMeusPedidos()]);
+    } else if (visaoAtual === 'pedidos') {
+      void carregarMeusPedidos();
+    }
+  });
+
+  useEffect(() => {
+    const timer = window.setTimeout(carregarAreaProtegida, 0);
+    return () => window.clearTimeout(timer);
+  }, [usuarioLogado?.id, visaoAtual]);
 
   // ==========================================
   // LÓGICA DE AUTENTICAÇÃO IMPORTADA DO LOGIN.JSX
@@ -1070,19 +1144,31 @@ export default function Loja() {
         setCarregandoLogin(false);
         return; // Para a execução aqui
       }
+      if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{10,128}$/.test(senhaLogin)) {
+        setErroLogin('Use ao menos 10 caracteres, com letra maiúscula, minúscula e número.');
+        setCarregandoLogin(false);
+        return;
+      }
     }
 
     try {
       const endpoint = isRegistro ? `${API_URL}/auth/cadastro` : `${API_URL}/auth/login`;
       const body = isRegistro 
-        ? JSON.stringify({ nome: nomeRegistro, email: emailLogin, senha: senhaLogin })
+        ? JSON.stringify({
+            nome: nomeRegistro,
+            email: emailLogin,
+            senha: senhaLogin,
+            aceitouTermos: true,
+            versaoTermos: configLoja.termsVersion || '2026-08-20',
+            aceitouMarketing: false,
+          })
         : JSON.stringify({ email: emailLogin, senha: senhaLogin });
 
-      const resposta = await fetch(endpoint, {
+      const resposta = await apiFetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body
-      });
+      }, false);
       
       const dados = await resposta.json();
 
@@ -1090,31 +1176,26 @@ export default function Loja() {
         throw new Error(dados.message || (isRegistro ? "Erro ao criar conta. Tente outro e-mail." : "Credenciais inválidas."));
       }
       
-      // Salva no LocalStorage para loja e painel compartilharem a mesma sessão
-      if (dados.token) {
-        localStorage.setItem('token', dados.token);
-        localStorage.setItem('usuario', JSON.stringify(dados.usuario));
-        localStorage.setItem('@BOO:token', dados.token);
-        localStorage.setItem('@BOO:usuario', JSON.stringify(dados.usuario));
-      }
-
       const usuarioAutenticado = dados.usuario || { email: emailLogin, nome: nomeRegistro };
+      limparTokensLegados();
+      salvarUsuario(usuarioAutenticado);
       setUsuarioLogado(usuarioAutenticado);
       setIsLoginAberto(false);
       setEmailLogin("");
       setSenhaLogin("");
       setNomeRegistro("");
+      setAceitouTermosLogin(false);
       setAvisoConta({
         tipo: usuarioAutenticado.role === 'ADMIN' ? 'admin' : 'sucesso',
         texto: usuarioAutenticado.role === 'ADMIN'
           ? 'Login realizado. Seu acesso de administrador está liberado.'
-          : `Bem-vinda${usuarioAutenticado.nome ? `, ${usuarioAutenticado.nome.split(' ')[0]}` : ''}. Sua área da conta foi preparada para você.`
+          : isRegistro
+            ? 'Conta criada. Confirme o link enviado ao seu e-mail antes da primeira compra.'
+            : `Bem-vinda${usuarioAutenticado.nome ? `, ${usuarioAutenticado.nome.split(' ')[0]}` : ''}. Sua área da conta foi preparada para você.`
       });
       setPedidoExpandido(null);
       navegarParaVisao('conta');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-      carregarMinhaConta();
-      carregarMeusPedidos();
     } catch (erro) {
       setErroLogin(erro.message);
     } finally {
@@ -1130,24 +1211,12 @@ export default function Loja() {
     if (Array.isArray(produtoSelecionado.tamanhos) && produtoSelecionado.tamanhos.length > 0) {
       return produtoSelecionado.tamanhos.map((tam) => ({ ...tam, label: normalizarTamanho(tam.label) }));
     }
-    return TAMANHOS_PADRAO.map((label) => ({ label: normalizarTamanho(label), estoque: label === "M" ? 1 : 0 }));
+    return [{ label: "U", estoque: Number(produtoSelecionado.estoque || 0) }];
   }, [produtoSelecionado]);
   const tamanhoSelecionadoInfo = tamanhosProdutoSelecionado.find((item) => item.label === tamanhoEscolhido);
 
   const isAdmin = usuarioLogado?.role === 'ADMIN';
   const totalPedidosCliente = meusPedidos.length;
-  const contaCompleta = Boolean(
-    dadosConta.nome &&
-    dadosConta.email &&
-    dadosConta.telefone &&
-    dadosConta.enderecoPadrao?.cep &&
-    dadosConta.enderecoPadrao?.rua &&
-    dadosConta.enderecoPadrao?.numero &&
-    dadosConta.enderecoPadrao?.bairro &&
-    dadosConta.enderecoPadrao?.cidade &&
-    dadosConta.enderecoPadrao?.estado
-  );
-
   const inputClasses = "w-full border border-zinc-200 rounded px-3 py-2 text-xs focus:outline-none focus:border-black transition-colors";
   const labelClasses = "text-[10px] font-bold tracking-widest uppercase text-zinc-400 block mb-1.5";
 
@@ -1205,7 +1274,7 @@ export default function Loja() {
                       onChange={(e) => {
                         setTermoBusca(e.target.value);
                         setIsSugestoesBuscaAberta(true);
-                        if (visaoAtual !== 'home') setVisaoAtual('home');
+                        if (visaoAtual !== 'home') navegarParaVisao('home');
                         if (e.target.value.length > 0) document.getElementById("catalogo")?.scrollIntoView({ behavior: "smooth" });
                       }}
                       onBlur={() => {
@@ -1518,7 +1587,7 @@ export default function Loja() {
 
           {visaoAtual === 'produto' && produtoSelecionado && (
             <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-12 animate-slideUpFade">
-              <button onClick={() => setVisaoAtual('home')} className="mb-8 text-xs font-bold uppercase tracking-wider text-zinc-500 hover:text-black flex items-center gap-2 transition-colors">← Voltar</button>
+              <button onClick={() => navegarParaVisao('home')} className="mb-8 text-xs font-bold uppercase tracking-wider text-zinc-500 hover:text-black flex items-center gap-2 transition-colors">← Voltar</button>
 
               <div className="grid md:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.75fr)] gap-8 lg:gap-16 items-start">
                 <div className="w-full max-w-xl mx-auto flex flex-col gap-4">
@@ -1542,6 +1611,11 @@ export default function Loja() {
                       <p className="text-[10px] text-zinc-400 font-bold uppercase tracking-widest mb-1">{produtoSelecionado.categoria}</p>
                       <h3 className="text-2xl sm:text-3xl font-black uppercase tracking-wider">{produtoSelecionado.nome}</h3>
                       <p className="text-xl sm:text-2xl font-bold text-zinc-900 mt-2">R$ {Number(produtoSelecionado.preco).toFixed(2).replace('.', ',')}</p>
+                      {produtoSelecionado.descricao && (
+                        <p className="mt-4 whitespace-pre-line text-sm leading-6 text-zinc-600">
+                          {produtoSelecionado.descricao}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -1660,7 +1734,7 @@ export default function Loja() {
             <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-12 animate-slideUpFade">
               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3 mb-8 border-b border-zinc-100 pb-4">
                 <h2 className="text-xl sm:text-2xl font-black uppercase tracking-wider">{confirmandoPagamento ? "Confirmando Pagamento" : etapaSacola === "carrinho" ? "Sua Sacola" : etapaSacola === "checkout" ? "Finalizar Pedido" : "Sucesso!"}</h2>
-                <button onClick={() => setVisaoAtual('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors text-left sm:text-right">Continuar Comprando</button>
+                <button onClick={() => navegarParaVisao('home')} className="text-xs font-bold uppercase text-zinc-500 hover:text-black transition-colors text-left sm:text-right">Continuar Comprando</button>
               </div>
 
               {confirmandoPagamento ? (
@@ -1683,7 +1757,7 @@ export default function Loja() {
               ) : carrinho.length === 0 ? (
                 <div className="text-center py-32 text-zinc-400 animate-fadeIn">
                   <p className="text-sm uppercase tracking-widest mb-6">Sua sacola está vazia.</p>
-                  <button onClick={() => setVisaoAtual('home')} className="border border-black text-black px-6 py-3 text-xs font-bold uppercase tracking-widest hover:bg-zinc-50 transition-colors">Ver Produtos</button>
+                  <button onClick={() => navegarParaVisao('home')} className="border border-black text-black px-6 py-3 text-xs font-bold uppercase tracking-widest hover:bg-zinc-50 transition-colors">Ver Produtos</button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
@@ -1925,13 +1999,10 @@ export default function Loja() {
 
                   <form onSubmit={salvarMinhaConta} className="border border-zinc-100 p-5 sm:p-6 rounded-3xl shadow-sm space-y-4 bg-white">
                     <div className="flex items-center justify-between gap-4 border-b border-zinc-100 pb-4">
-                      <div>
-                        <p className="text-sm font-black uppercase tracking-wider">Seus Dados</p>
-                        <p className="text-xs text-zinc-500 mt-1">Atualize suas informações principais de cadastro.</p>
-                      </div>
-                      <span className={`text-[10px] font-bold uppercase px-3 py-1.5 rounded-full ${contaCompleta ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-                        {contaCompleta ? 'Perfil completo' : 'Perfil incompleto'}
-                      </span>
+                    <div>
+                      <p className="text-sm font-black uppercase tracking-wider">Seus Dados</p>
+                      <p className="text-xs text-zinc-500 mt-1">Atualize suas informações principais de cadastro.</p>
+                    </div>
                     </div>
                 <div>
                   <label className={labelClasses}>Nome Completo</label>
@@ -1950,6 +2021,25 @@ export default function Loja() {
                     value={dadosConta.email}
                     onChange={(e) => setDadosConta(prev => ({ ...prev, email: e.target.value }))}
                     className={inputClasses}
+                  />
+                  {!dadosConta.emailVerificado && (
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-600">
+                      <span>Confirme este endereço para liberar compras.</span>
+                      <button type="button" onClick={reenviarVerificacaoEmail} className="font-bold uppercase tracking-wider underline underline-offset-4">
+                        Reenviar verificação
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className={labelClasses}>Senha atual</label>
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    value={senhaAtualConta}
+                    onChange={(e) => setSenhaAtualConta(e.target.value)}
+                    className={inputClasses}
+                    placeholder="Obrigatória apenas para trocar o e-mail"
                   />
                 </div>
                 <div>
@@ -2058,17 +2148,6 @@ export default function Loja() {
                       />
                     </label>
 
-                    <label className="flex items-center justify-between gap-4 rounded-xl border border-zinc-200 px-4 py-3 cursor-pointer">
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-wider">Status do pedido por WhatsApp</p>
-                        <p className="text-[11px] text-zinc-500 mt-1">Estrutura salva agora para ativarmos no backend.</p>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={dadosConta.preferenciasConta.statusPedidoWhatsApp}
-                        onChange={(e) => setDadosConta(prev => ({ ...prev, preferenciasConta: { ...prev.preferenciasConta, statusPedidoWhatsApp: e.target.checked } }))}
-                      />
-                    </label>
                   </div>
                 </div>
 
@@ -2110,7 +2189,7 @@ export default function Loja() {
               ) : meusPedidos.length === 0 ? (
                 <div className="text-center py-32 text-zinc-400 animate-fadeIn">
                   <p className="text-sm uppercase tracking-widest mb-6">Você ainda não fez nenhum pedido.</p>
-                  <button onClick={() => setVisaoAtual('home')} className="border border-black text-black px-6 py-3 text-xs font-bold uppercase tracking-widest hover:bg-zinc-50 transition-colors">Ver Produtos</button>
+                  <button onClick={() => navegarParaVisao('home')} className="border border-black text-black px-6 py-3 text-xs font-bold uppercase tracking-widest hover:bg-zinc-50 transition-colors">Ver Produtos</button>
                 </div>
               ) : (
                 <div className="space-y-4">

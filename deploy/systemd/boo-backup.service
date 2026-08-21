@@ -1,0 +1,9 @@
+[Unit]
+Description=Backup BOO Sportwear database and product uploads
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/var/www/boosportswear/deploy/scripts/backup-boo.sh
+PrivateTmp=true
+NoNewPrivileges=true

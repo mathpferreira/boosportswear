@@ -1,16 +1,34 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { CuponsService } from './cupons.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import {
+  AtualizarCupomDto,
+  CriarCupomDto,
+  ValidarCupomDto,
+} from './cupons.dto';
+import { Throttle } from '@nestjs/throttler';
 
 @Controller('cupons')
 export class CuponsPublicController {
   constructor(private readonly cuponsService: CuponsService) {}
 
   @Get('validar')
-  validar(@Query('codigo') codigo: string, @Query('subtotal') subtotal: string) {
-    return this.cuponsService.validar(codigo, Number(subtotal || 0));
+  @Throttle({ default: { limit: 30, ttl: 60 * 1000 } })
+  validar(@Query() query: ValidarCupomDto) {
+    return this.cuponsService.validar(query.codigo, query.subtotal);
   }
 }
 
@@ -26,39 +44,20 @@ export class CuponsAdminController {
   }
 
   @Post()
-  criar(
-    @Body()
-    body: {
-      nome: string;
-      codigo: string;
-      tipo: 'PERCENTUAL' | 'FIXO';
-      valor: number;
-      expiraEm?: string;
-      usosMaximos?: number | null;
-    },
-  ) {
+  criar(@Body() body: CriarCupomDto) {
     return this.cuponsService.criar(body);
   }
 
   @Patch(':id')
   atualizar(
-    @Param('id') id: string,
-    @Body()
-    body: {
-      nome?: string;
-      codigo?: string;
-      tipo?: 'PERCENTUAL' | 'FIXO';
-      valor?: number;
-      ativo?: boolean;
-      expiraEm?: string | null;
-      usosMaximos?: number | null;
-    },
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: AtualizarCupomDto,
   ) {
     return this.cuponsService.atualizar(id, body);
   }
 
   @Delete(':id')
-  excluir(@Param('id') id: string) {
+  excluir(@Param('id', ParseUUIDPipe) id: string) {
     return this.cuponsService.excluir(id);
   }
 }

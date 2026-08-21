@@ -14,7 +14,9 @@ describe('PedidosService - cancelamento', () => {
 
   function criarService(tx: any) {
     const prisma = {
-      $transaction: jest.fn((callback: (cliente: any) => unknown) => callback(tx)),
+      $transaction: jest.fn((callback: (cliente: any) => unknown) =>
+        callback(tx),
+      ),
     };
     const emails = { pedidoCancelado: jest.fn().mockResolvedValue(true) };
     const service = new PedidosService(
@@ -28,7 +30,11 @@ describe('PedidosService - cancelamento', () => {
   }
 
   it('devolve o estoque total e o estoque do tamanho selecionado', async () => {
-    const pedidoCancelado = { ...pedidoPendente, status: 'cancelado', estoqueRestaurado: true };
+    const pedidoCancelado = {
+      ...pedidoPendente,
+      status: 'cancelado',
+      estoqueRestaurado: true,
+    };
     const tx = {
       pedido: {
         findUnique: jest.fn().mockResolvedValue(pedidoPendente),
@@ -38,7 +44,10 @@ describe('PedidosService - cancelamento', () => {
       produto: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'produto-1',
-          tamanhos: [{ label: 'P', estoque: 1 }, { label: 'M', estoque: 3 }],
+          tamanhos: [
+            { label: 'P', estoque: 1 },
+            { label: 'M', estoque: 3 },
+          ],
         }),
         update: jest.fn().mockResolvedValue({}),
       },
@@ -46,13 +55,20 @@ describe('PedidosService - cancelamento', () => {
     };
     const { service, emails } = criarService(tx);
 
-    const resultado = await service.cancelar('pedido-1', 'cliente', 'usuario-1');
+    const resultado = await service.cancelar(
+      'pedido-1',
+      'cliente',
+      'usuario-1',
+    );
 
     expect(tx.produto.update).toHaveBeenCalledWith({
       where: { id: 'produto-1' },
       data: {
         estoque: { increment: 2 },
-        tamanhos: [{ label: 'P', estoque: 1 }, { label: 'M', estoque: 5 }],
+        tamanhos: [
+          { label: 'P', estoque: 1 },
+          { label: 'M', estoque: 5 },
+        ],
         esgotado: false,
       },
     });

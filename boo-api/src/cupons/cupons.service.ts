@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import type { Cupom } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -9,7 +14,7 @@ export class CuponsService {
     return codigo.trim().toUpperCase();
   }
 
-  private validarDisponibilidade(cupom: any) {
+  private validarDisponibilidade(cupom: Cupom | null): asserts cupom is Cupom {
     if (!cupom) {
       throw new NotFoundException('Cupom não encontrado.');
     }
@@ -44,10 +49,17 @@ export class CuponsService {
     const codigo = this.normalizarCodigo(dados.codigo);
     const nome = String(dados.nome || '').trim();
     const valor = Number(dados.valor);
-    if (nome.length < 2 || nome.length > 120) throw new BadRequestException('Nome de cupom invalido.');
-    if (!codigo || codigo.length > 40) throw new BadRequestException('Codigo de cupom invalido.');
-    if (!['PERCENTUAL', 'FIXO'].includes(dados.tipo)) throw new BadRequestException('Tipo de cupom invalido.');
-    if (!Number.isFinite(valor) || valor <= 0 || (dados.tipo === 'PERCENTUAL' && valor > 100)) {
+    if (nome.length < 2 || nome.length > 120)
+      throw new BadRequestException('Nome de cupom invalido.');
+    if (!codigo || codigo.length > 40)
+      throw new BadRequestException('Codigo de cupom invalido.');
+    if (!['PERCENTUAL', 'FIXO'].includes(dados.tipo))
+      throw new BadRequestException('Tipo de cupom invalido.');
+    if (
+      !Number.isFinite(valor) ||
+      valor <= 0 ||
+      (dados.tipo === 'PERCENTUAL' && valor > 100)
+    ) {
       throw new BadRequestException('Valor de cupom invalido.');
     }
     const existente = await this.prisma.cupom.findUnique({ where: { codigo } });
@@ -67,7 +79,10 @@ export class CuponsService {
         tipo: dados.tipo,
         valor,
         expiraEm,
-        usosMaximos: dados.usosMaximos == null ? null : Math.max(1, Math.floor(Number(dados.usosMaximos))),
+        usosMaximos:
+          dados.usosMaximos == null
+            ? null
+            : Math.max(1, Math.floor(Number(dados.usosMaximos))),
       },
     });
   }
@@ -90,14 +105,21 @@ export class CuponsService {
     }
 
     let codigoNormalizado: string | undefined;
-    const nomeNormalizado = dados.nome === undefined ? undefined : String(dados.nome).trim();
-    if (nomeNormalizado !== undefined && (nomeNormalizado.length < 2 || nomeNormalizado.length > 120)) {
+    const nomeNormalizado =
+      dados.nome === undefined ? undefined : String(dados.nome).trim();
+    if (
+      nomeNormalizado !== undefined &&
+      (nomeNormalizado.length < 2 || nomeNormalizado.length > 120)
+    ) {
       throw new BadRequestException('Nome de cupom invalido.');
     }
     if (dados.codigo) {
       codigoNormalizado = this.normalizarCodigo(dados.codigo);
-      if (codigoNormalizado.length > 40) throw new BadRequestException('Codigo de cupom invalido.');
-      const outro = await this.prisma.cupom.findUnique({ where: { codigo: codigoNormalizado } });
+      if (codigoNormalizado.length > 40)
+        throw new BadRequestException('Codigo de cupom invalido.');
+      const outro = await this.prisma.cupom.findUnique({
+        where: { codigo: codigoNormalizado },
+      });
       if (outro && outro.id !== id) {
         throw new BadRequestException('Já existe um cupom com esse código.');
       }
@@ -105,9 +127,14 @@ export class CuponsService {
     if (dados.tipo && !['PERCENTUAL', 'FIXO'].includes(dados.tipo)) {
       throw new BadRequestException('Tipo de cupom invalido.');
     }
-    if (dados.valor !== undefined) {
-      const valor = Number(dados.valor);
-      if (!Number.isFinite(valor) || valor <= 0 || (dados.tipo === 'PERCENTUAL' && valor > 100) || (dados.tipo === undefined && cupom.tipo === 'PERCENTUAL' && valor > 100)) {
+    const tipoEfetivo = dados.tipo || cupom.tipo;
+    const valorEfetivo = Number(dados.valor ?? cupom.valor);
+    if (dados.valor !== undefined || dados.tipo !== undefined) {
+      if (
+        !Number.isFinite(valorEfetivo) ||
+        valorEfetivo <= 0 ||
+        (tipoEfetivo === 'PERCENTUAL' && valorEfetivo > 100)
+      ) {
         throw new BadRequestException('Valor de cupom invalido.');
       }
     }
@@ -124,8 +151,18 @@ export class CuponsService {
         tipo: dados.tipo,
         valor: dados.valor != null ? Number(dados.valor) : undefined,
         ativo: dados.ativo,
-        expiraEm: dados.expiraEm === null ? null : (dados.expiraEm ? expiraEm : undefined),
-        usosMaximos: dados.usosMaximos === undefined ? undefined : (dados.usosMaximos === null ? null : Math.max(1, Math.floor(Number(dados.usosMaximos)))),
+        expiraEm:
+          dados.expiraEm === null
+            ? null
+            : dados.expiraEm
+              ? expiraEm
+              : undefined,
+        usosMaximos:
+          dados.usosMaximos === undefined
+            ? undefined
+            : dados.usosMaximos === null
+              ? null
+              : Math.max(1, Math.floor(Number(dados.usosMaximos))),
       },
     });
   }
@@ -146,24 +183,24 @@ export class CuponsService {
     });
 
     this.validarDisponibilidade(cupom);
-    const cupomValido = cupom!;
-
     const subtotalNumerico = Number(subtotal || 0);
     if (!Number.isFinite(subtotalNumerico) || subtotalNumerico < 0) {
       throw new BadRequestException('Subtotal invalido.');
     }
-    const desconto = cupomValido.tipo === 'PERCENTUAL'
-      ? subtotalNumerico * (cupomValido.valor / 100)
-      : cupomValido.valor;
+    const valorCupom = Number(cupom.valor);
+    const desconto =
+      cupom.tipo === 'PERCENTUAL'
+        ? subtotalNumerico * (valorCupom / 100)
+        : valorCupom;
 
     const descontoAplicado = Math.min(desconto, subtotalNumerico);
 
     return {
-      id: cupomValido.id,
-      nome: cupomValido.nome,
-      codigo: cupomValido.codigo,
-      tipo: cupomValido.tipo,
-      valor: cupomValido.valor,
+      id: cupom.id,
+      nome: cupom.nome,
+      codigo: cupom.codigo,
+      tipo: cupom.tipo,
+      valor: valorCupom,
       descontoAplicado,
     };
   }

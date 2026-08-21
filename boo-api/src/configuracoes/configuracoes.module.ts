@@ -4,10 +4,9 @@ import {
   ConfiguracoesController,
   ConfiguracoesAdminController,
 } from './configuracoes.controller';
-import { PrismaService } from '../../prisma/prisma.service';
 
 @Module({
   controllers: [ConfiguracoesController, ConfiguracoesAdminController],
-  providers: [ConfiguracoesService, PrismaService],
+  providers: [ConfiguracoesService],
 })
 export class ConfiguracoesModule {}

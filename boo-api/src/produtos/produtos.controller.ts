@@ -1,12 +1,28 @@
-import { BadRequestException, Controller, Get, Post, Put, Delete, Body, Param, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  ParseUUIDPipe,
+  UseGuards,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import sharp from 'sharp';
 import { unlink, rename } from 'fs/promises';
+import { randomUUID } from 'crypto';
+import { Throttle } from '@nestjs/throttler';
 import { ProdutosService } from './produtos.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { SalvarProdutoDto } from './produtos.dto';
 
 interface ArquivoUpload {
   filename: string;
@@ -35,7 +51,7 @@ export class ProdutosController {
   }
 
   @Get(':id')
-  async buscarPorId(@Param('id') id: string) {
+  async buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
     return await this.produtosService.buscarPublicoPorId(id);
   }
 
@@ -44,37 +60,41 @@ export class ProdutosController {
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  async criarProduto(@Body() dados: any) {
+  async criarProduto(@Body() dados: SalvarProdutoDto) {
     return await this.produtosService.criarProduto(dados);
   }
 
   @Put(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  async atualizarProduto(@Param('id') id: string, @Body() dados: any) {
+  async atualizarProduto(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dados: SalvarProdutoDto,
+  ) {
     return await this.produtosService.atualizarProduto(id, dados);
   }
 
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  async removerProduto(@Param('id') id: string) {
+  async removerProduto(@Param('id', ParseUUIDPipe) id: string) {
     return await this.produtosService.removerProduto(id);
   }
 
   @Post('upload')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
+  @Throttle({ default: { limit: 30, ttl: 60 * 60 * 1000 } })
   @UseInterceptors(
     FileInterceptor('arquivo', {
       storage: diskStorage({
         destination: './uploads/produtos',
         filename: (req, file, callback) => {
-          const nomeUnico = `${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
+          const nomeUnico = `${randomUUID()}.webp`;
           callback(null, nomeUnico);
         },
       }),
-      limits: { fileSize: 15 * 1024 * 1024 }, // 15MB por imagem (antes da compressão)
+      limits: { fileSize: 10 * 1024 * 1024 },
       fileFilter: (req, file, callback) => {
         const tiposAceitos = ['image/jpeg', 'image/png', 'image/webp'];
         callback(null, tiposAceitos.includes(file.mimetype));
@@ -82,17 +102,34 @@ export class ProdutosController {
     }),
   )
   async uploadImagem(@UploadedFile() arquivo: ArquivoUpload) {
-    if (!arquivo) throw new BadRequestException('Envie uma imagem JPEG, PNG ou WEBP.');
+    if (!arquivo)
+      throw new BadRequestException('Envie uma imagem JPEG, PNG ou WEBP.');
     const caminhoOriginal = arquivo.path;
     const caminhoTemp = `${caminhoOriginal}.tmp`;
 
-    await sharp(caminhoOriginal)
-      .resize({ width: 1200, withoutEnlargement: true })
-      .webp({ quality: 78 })
-      .toFile(caminhoTemp);
+    try {
+      await sharp(caminhoOriginal, {
+        failOn: 'error',
+        limitInputPixels: 40_000_000,
+      })
+        .rotate()
+        .resize({
+          width: 1200,
+          height: 1800,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .webp({ quality: 78 })
+        .toFile(caminhoTemp);
 
-    await unlink(caminhoOriginal);
-    await rename(caminhoTemp, caminhoOriginal);
+      await unlink(caminhoOriginal);
+      await rename(caminhoTemp, caminhoOriginal);
+    } catch {
+      await Promise.allSettled([unlink(caminhoOriginal), unlink(caminhoTemp)]);
+      throw new BadRequestException(
+        'A imagem esta corrompida ou excede o limite de resolucao.',
+      );
+    }
 
     return {
       url: `/uploads/produtos/${arquivo.filename}`,

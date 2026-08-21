@@ -3,16 +3,23 @@ import Loja from './pages/Loja';
 import Admin from './pages/Admin';
 import Login from './pages/Login';
 import Institucional from './pages/Institucional';
+import ContaAcesso from './pages/ContaAcesso';
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Loja />} />
+        <Route path="/carrinho" element={<Loja />} />
+        <Route path="/minha-conta" element={<Loja />} />
+        <Route path="/meus-pedidos" element={<Loja />} />
         <Route path="/produto/:slugId" element={<Loja />} />
         <Route path="/admin/*" element={<Admin />} />
         <Route path="/login" element={<Login />} />
         <Route path="/registro" element={<Login initialMode="register" />} />
+        <Route path="/verificar-email" element={<ContaAcesso modo="verificar" />} />
+        <Route path="/esqueci-senha" element={<ContaAcesso modo="recuperar" />} />
+        <Route path="/redefinir-senha" element={<ContaAcesso modo="redefinir" />} />
         <Route path="/politicas" element={<Institucional />} />
         <Route path="/termos" element={<Institucional />} />
         <Route path="/privacidade" element={<Institucional />} />

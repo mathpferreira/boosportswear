@@ -1,83 +1,89 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AuthCard from '../components/AuthCard';
-import { API_URL } from '../config/api';
+import {
+  API_URL,
+  apiFetch,
+  limparTokensLegados,
+  salvarUsuario,
+} from '../config/api';
 
 export default function Login({ initialMode = 'login' }) {
   const [modoCadastro, setModoCadastro] = useState(initialMode === 'register');
-  const [formData, setFormData] = useState({
-    nome: '',
-    email: '',
-    senha: '',
-  });
+  const [formData, setFormData] = useState({ nome: '', email: '', senha: '' });
   const [aceitouTermos, setAceitouTermos] = useState(false);
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(false);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    setModoCadastro(initialMode === 'register');
-  }, [initialMode]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setErro('');
     setCarregando(true);
 
-    if (modoCadastro) {
-      const palavrasNome = formData.nome.trim().split(/\s+/);
-      if (palavrasNome.length < 2) {
-        setErro('Por favor, insira seu nome e sobrenome completos.');
-        setCarregando(false);
-        return;
-      }
-      if (!aceitouTermos) {
-        setErro('Você precisa aceitar os Termos e Condições da Boo Sportwear.');
-        setCarregando(false);
-        return;
-      }
-    }
-
-    const regexEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!regexEmail.test(formData.email)) {
-      setErro('Por favor, digite um endereço de e-mail válido.');
-      setCarregando(false);
-      return;
-    }
-
-    if (formData.senha.length < 6) {
-      setErro('Sua senha deve ter no mínimo 6 caracteres.');
-      setCarregando(false);
-      return;
-    }
-
-    const endpoint = modoCadastro ? `${API_URL}/auth/cadastro` : `${API_URL}/auth/login`;
-
     try {
-      const resposta = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
+      if (modoCadastro) {
+        if (formData.nome.trim().split(/\s+/).length < 2) {
+          throw new Error('Insira seu nome e sobrenome completos.');
+        }
+        if (!aceitouTermos) {
+          throw new Error('Você precisa aceitar as Políticas da Loja.');
+        }
+        if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{10,128}$/.test(formData.senha)) {
+          throw new Error(
+            'Use ao menos 10 caracteres, com letra maiúscula, minúscula e número.',
+          );
+        }
+      }
 
-      const dados = await resposta.json();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        throw new Error('Digite um endereço de e-mail válido.');
+      }
+      if (!formData.senha) throw new Error('Informe sua senha.');
 
+      const endpoint = modoCadastro
+        ? API_URL + '/auth/cadastro'
+        : API_URL + '/auth/login';
+      let versaoTermos = '';
+      if (modoCadastro) {
+        const configuracao = await apiFetch(`${API_URL}/configuracoes`, {}, false);
+        const dadosConfiguracao = await configuracao.json().catch(() => ({}));
+        if (!configuracao.ok || !dadosConfiguracao.termsVersion) {
+          throw new Error('Não foi possível confirmar a versão das políticas. Tente novamente.');
+        }
+        versaoTermos = dadosConfiguracao.termsVersion;
+      }
+      const resposta = await apiFetch(
+        endpoint,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            modoCadastro
+              ? {
+                  ...formData,
+                  aceitouTermos,
+                  versaoTermos,
+                  aceitouMarketing: false,
+                }
+              : formData,
+          ),
+        },
+        false,
+      );
+      const dados = await resposta.json().catch(() => ({}));
       if (!resposta.ok) {
-        throw new Error(dados.message || 'Erro ao processar requisição.');
+        const mensagem = Array.isArray(dados.message)
+          ? dados.message[0]
+          : dados.message;
+        throw new Error(mensagem || 'Não foi possível entrar.');
       }
 
-      localStorage.setItem('@BOO:token', dados.token);
-      localStorage.setItem('@BOO:usuario', JSON.stringify(dados.usuario));
-      localStorage.setItem('token', dados.token);
-      localStorage.setItem('usuario', JSON.stringify(dados.usuario));
-
-      if (dados.usuario.role === 'ADMIN') {
-        window.location.href = '/admin';
-      } else {
-        window.location.href = '/';
-      }
-    } catch (err) {
-      setErro(err.message);
+      limparTokensLegados();
+      salvarUsuario(dados.usuario);
+      window.location.href = dados.usuario.role === 'ADMIN' ? '/admin' : '/';
+    } catch (error) {
+      setErro(error.message);
     } finally {
       setCarregando(false);
     }
@@ -89,10 +95,10 @@ export default function Login({ initialMode = 'login' }) {
         <AuthCard
           isRegister={modoCadastro}
           onToggleMode={() => {
-            const proximoModoCadastro = !modoCadastro;
-            setModoCadastro(proximoModoCadastro);
+            const cadastro = !modoCadastro;
+            setModoCadastro(cadastro);
             setErro('');
-            navigate(proximoModoCadastro ? '/registro' : '/login');
+            navigate(cadastro ? '/registro' : '/login');
           }}
           onSubmit={handleSubmit}
           loading={carregando}
@@ -100,9 +106,15 @@ export default function Login({ initialMode = 'login' }) {
           name={formData.nome}
           email={formData.email}
           password={formData.senha}
-          onNameChange={(valor) => setFormData(prev => ({ ...prev, nome: valor }))}
-          onEmailChange={(valor) => setFormData(prev => ({ ...prev, email: valor }))}
-          onPasswordChange={(valor) => setFormData(prev => ({ ...prev, senha: valor }))}
+          onNameChange={(valor) =>
+            setFormData((anterior) => ({ ...anterior, nome: valor }))
+          }
+          onEmailChange={(valor) =>
+            setFormData((anterior) => ({ ...anterior, email: valor }))
+          }
+          onPasswordChange={(valor) =>
+            setFormData((anterior) => ({ ...anterior, senha: valor }))
+          }
           termsAccepted={aceitouTermos}
           onTermsChange={setAceitouTermos}
           pageMode

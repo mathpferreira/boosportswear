@@ -1,35 +1,53 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { PedidosService } from './pedidos.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CriarPedidoDto, StatusPedidoDto } from './pedidos.dto';
+import { Throttle } from '@nestjs/throttler';
+import type { AuthenticatedRequest } from '../common/types/request';
 
 @Controller('pedidos')
 export class PedidosController {
   constructor(private readonly pedidosService: PedidosService) {}
 
-  private origemPublica(req: any) {
-    const protocolo = String(req.get?.('x-forwarded-proto') || req.protocol || 'http').split(',')[0].trim();
-    const host = String(req.get?.('x-forwarded-host') || req.get?.('host') || '').split(',')[0].trim();
+  private origemPublica(req: AuthenticatedRequest) {
+    const protocolo = String(
+      req.get?.('x-forwarded-proto') || req.protocol || 'http',
+    )
+      .split(',')[0]
+      .trim();
+    const host = String(
+      req.get?.('x-forwarded-host') || req.get?.('host') || '',
+    )
+      .split(',')[0]
+      .trim();
     return `${protocolo}://${host}`;
   }
 
   @Post()
   @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 10 * 60 * 1000 } })
   criar(
     @Body()
-    body: {
-      usuarioId?: string | null;
-      itens: any[];
-      entrega: any;
-      formaPagamento: string;
-      frete?: any;
-      total: number;
-      cupom?: any;
-    },
-    @Req() req: any,
+    body: CriarPedidoDto,
+    @Req() req: AuthenticatedRequest,
   ) {
-    return this.pedidosService.criar(body, req.user.id, this.origemPublica(req));
+    return this.pedidosService.criar(
+      body,
+      req.user.id,
+      this.origemPublica(req),
+    );
   }
 
   @Get()
@@ -42,7 +60,10 @@ export class PedidosController {
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  atualizarStatus(@Param('id') id: string, @Body() body: { status: string }) {
+  atualizarStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: StatusPedidoDto,
+  ) {
     return this.pedidosService.atualizarStatus(id, body.status);
   }
 }
@@ -53,12 +74,16 @@ export class MeusPedidosController {
   constructor(private readonly pedidosService: PedidosService) {}
 
   @Get()
-  meusPedidos(@Req() req: any) {
+  meusPedidos(@Req() req: AuthenticatedRequest) {
     return this.pedidosService.listarPorUsuario(req.user.id);
   }
 
   @Patch(':id/cancelar')
-  cancelar(@Param('id') id: string, @Req() req: any) {
+  @Throttle({ default: { limit: 20, ttl: 60 * 1000 } })
+  cancelar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.pedidosService.cancelar(id, 'cliente', req.user.id);
   }
 }

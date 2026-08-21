@@ -1,5 +1,11 @@
-import { Injectable, BadRequestException, NotFoundException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+  ConflictException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { CategoriaDto } from './categorias.dto';
 
 @Injectable()
 export class CategoriasService {
@@ -19,16 +25,18 @@ export class CategoriasService {
     return categoria;
   }
 
-  async criarCategoria(dados: any) {
+  async criarCategoria(dados: CategoriaDto) {
     if (!dados) {
       throw new BadRequestException('Corpo da requisição vazio ou inválido');
     }
-    const nome = dados.nome?.trim();
+    const nome = dados.nome.trim();
     if (!nome) {
       throw new BadRequestException('O campo "nome" é obrigatório');
     }
 
-    const existente = await this.prisma.categoria.findUnique({ where: { nome } });
+    const existente = await this.prisma.categoria.findUnique({
+      where: { nome },
+    });
     if (existente) {
       throw new ConflictException(`Categoria "${nome}" já existe`);
     }
@@ -38,13 +46,13 @@ export class CategoriasService {
     });
   }
 
-  async atualizarCategoria(id: string, dados: any) {
+  async atualizarCategoria(id: string, dados: CategoriaDto) {
     await this.buscarPorId(id); // garante que existe, senão já lança 404
 
     if (!dados) {
       throw new BadRequestException('Corpo da requisição vazio ou inválido');
     }
-    const nome = dados.nome?.trim();
+    const nome = dados.nome.trim();
     if (!nome) {
       throw new BadRequestException('O campo "nome" é obrigatório');
     }

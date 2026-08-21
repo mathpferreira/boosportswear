@@ -22,36 +22,63 @@ describe('FreteService', () => {
       }),
     } as any);
 
-    await expect(new FreteService().validarEnderecoEntrega({
-      cep: '08529-100',
-      cidade: 'Cuiaba',
-      estado: 'MT',
-    })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      new FreteService({} as any).validarEnderecoEntrega({
+        cep: '08529-100',
+        cidade: 'Cuiaba',
+        estado: 'MT',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('recalcula no servidor e recusa o valor de frete adulterado', async () => {
     process.env.FRENET_TOKEN = 'token-de-teste';
-    jest.spyOn(global, 'fetch').mockResolvedValue({
-      ok: true,
-      text: jest.fn().mockResolvedValue(JSON.stringify({
-        ShippingSevicesArray: [{
-          ServiceCode: 'SEDEX',
-          ServiceDescription: 'Sedex',
-          Carrier: 'Correios',
-          ShippingPrice: '25.90',
-          DeliveryTime: 3,
-          Error: false,
-        }],
-      })),
-    } as any);
+    jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        json: jest.fn().mockResolvedValue({
+          cep: '78000-000',
+          localidade: 'Cuiaba',
+          uf: 'MT',
+        }),
+      } as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        text: jest.fn().mockResolvedValue(
+          JSON.stringify({
+            ShippingSevicesArray: [
+              {
+                ServiceCode: 'SEDEX',
+                ServiceDescription: 'Sedex',
+                Carrier: 'Correios',
+                ShippingPrice: '25.90',
+                DeliveryTime: 3,
+                Error: false,
+              },
+            ],
+          }),
+        ),
+      } as any);
 
-    await expect(new FreteService().validarOpcao({
-      cep: '78000000',
-      subtotal: 100,
-      itens: [{ id: 'produto-1', quantidade: 1, preco: 100 }],
-    }, {
-      codigo: 'SEDEX',
-      valor: 0,
-    })).rejects.toBeInstanceOf(BadRequestException);
+    const prisma = {
+      configuracao: {
+        findFirst: jest.fn().mockResolvedValue({ frete: { ativo: true } }),
+      },
+    };
+
+    await expect(
+      new FreteService(prisma as any).validarOpcao(
+        {
+          cep: '78000000',
+          subtotal: 100,
+          itens: [{ id: 'produto-1', quantidade: 1, preco: 100 }],
+        },
+        {
+          codigo: 'SEDEX',
+          valor: 0,
+        },
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

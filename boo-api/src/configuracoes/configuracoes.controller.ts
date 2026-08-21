@@ -3,6 +3,7 @@ import { ConfiguracoesService } from './configuracoes.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { AtualizarConfiguracaoDto } from './configuracoes.dto';
 
 // Rota pública — usada pela loja (tarja do topo, rodapé)
 @Controller('configuracoes')
@@ -11,7 +12,7 @@ export class ConfiguracoesController {
 
   @Get()
   obter() {
-    return this.configuracoesService.obter();
+    return this.configuracoesService.obterPublico();
   }
 }
 
@@ -28,16 +29,7 @@ export class ConfiguracoesAdminController {
   }
 
   @Patch()
-  atualizar(
-    @Body()
-    body: {
-      lojaAberta?: boolean;
-      fraseTopo?: string;
-      instagramUrl?: string;
-      emailSuporte?: string;
-      frete?: any;
-    },
-  ) {
+  atualizar(@Body() body: AtualizarConfiguracaoDto) {
     return this.configuracoesService.atualizar(body);
   }
 }

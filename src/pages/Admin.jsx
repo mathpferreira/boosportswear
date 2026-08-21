@@ -1,6 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffectEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { API_URL } from '../config/api';
+import {
+  API_URL,
+  apiFetch,
+  encerrarSessao,
+  limparTokensLegados,
+  salvarUsuario,
+} from '../config/api';
 import { 
   FiMenu,
   FiX,
@@ -25,6 +31,8 @@ import {
   FiArrowLeft,
   FiMail
 } from 'react-icons/fi';
+
+const fetch = apiFetch;
 
 export default function Admin() {
   const TAMANHOS_PADRAO = ["P", "M", "G", "U"];
@@ -56,6 +64,7 @@ export default function Admin() {
     const proximaAba = typeof aba === 'function' ? aba(abaAtiva) : aba;
     const abaSegura = abasValidas.includes(proximaAba) ? proximaAba : 'home';
     navigate(abaSegura === 'home' ? '/admin' : `/admin/${abaSegura}`);
+    setIsMenuAberto(false);
   };
 
   // Pedidos
@@ -100,6 +109,7 @@ export default function Admin() {
   const [usuarioParaAlterarRole, setUsuarioParaAlterarRole] = useState(null);
   const [menuUsuarioAberto, setMenuUsuarioAberto] = useState(null);
   const [logsAcoes, setLogsAcoes] = useState([]);
+  const [termoBuscaLog, setTermoBuscaLog] = useState('');
 
   // Cupons
   const [cupons, setCupons] = useState([]);
@@ -121,13 +131,20 @@ export default function Admin() {
     lojaAberta: true,
     frete: {
       ativo: true,
-      valorBase: 19.9,
-      valorGratisApos: 250,
+      motoboyAtivo: true,
+      cepOrigem: "03133000",
+      larguraCm: 20,
+      alturaCm: 8,
+      comprimentoCm: 28,
+      pesoKg: 0.5,
       prazo: "3 a 5 dias úteis"
     }
   });
   const [emailTeste, setEmailTeste] = useState("");
   const [enviandoEmailTeste, setEnviandoEmailTeste] = useState(false);
+  const [emailTemplates, setEmailTemplates] = useState({});
+  const [salvandoTemplates, setSalvandoTemplates] = useState(false);
+  const [entregasEmail, setEntregasEmail] = useState([]);
 
 const [toast, setToast] = useState({ show: false, msg: "", tipo: "sucesso" });
 
@@ -136,16 +153,13 @@ const dispararToast = (msg, tipo = "sucesso") => {
   setTimeout(() => setToast({ show: false, msg: "", tipo: "sucesso" }), 3500);
 };
 
-const registrarLogAcao = (nome, acao) => {
-  setLogsAcoes(prev => [
-    {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      nome,
-      acao,
-      dataHora: new Date().toISOString()
-    },
-    ...prev
-  ].slice(0, 50));
+const sair = async () => {
+  await encerrarSessao();
+  window.location.href = '/login';
+};
+
+const registrarLogAcao = () => {
+  setTimeout(() => void carregarLogs(), 250);
 };
 
 const normalizarTamanho = (label = "") =>
@@ -161,10 +175,7 @@ const normalizarTamanho = (label = "") =>
 
   const carregarProdutos = async () => {
     try {
-      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/produtos/admin`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await fetch(`${API_URL}/produtos/admin`);
       if (res.ok) {
         const data = await res.json();
         const produtosFormatados = data.map(p => ({
@@ -173,7 +184,7 @@ const normalizarTamanho = (label = "") =>
           cores: p.cores || ["#000000"],
           tamanhos: Array.isArray(p.tamanhos) && p.tamanhos.length > 0
             ? p.tamanhos.map((tam) => ({ ...tam, label: normalizarTamanho(tam.label) }))
-            : TAMANHOS_PADRAO.map((label) => ({ label, estoque: label === "M" ? 1 : 0 })),
+            : [{ label: "U", estoque: Number(p.estoque || 0) }],
           preco: p.preco?.toString().replace('.', ',') || "0,00"
         }));
         setProdutos(produtosFormatados);
@@ -196,18 +207,10 @@ const normalizarTamanho = (label = "") =>
     }
   };
 
-  // Busca os pedidos no backend.
-  // ATENÇÃO: este endpoint ainda precisa existir na API (GET /api/pedidos).
-  // Formato esperado por item: { id, numero, cliente: { nome, email, telefone },
-  // itens: [{ nome, tamanho, quantidade, preco }], total, frete, status,
-  // formaPagamento, endereco, criadoEm }
   const carregarPedidos = async () => {
     setCarregandoPedidos(true);
     try {
-      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/pedidos`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetch(`${API_URL}/pedidos`);
       if (res.ok) {
         const data = await res.json();
         setPedidos(data);
@@ -230,10 +233,9 @@ const normalizarTamanho = (label = "") =>
       if (!confirmou) return;
     }
     try {
-      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
       const res = await fetch(`${API_URL}/pedidos/${pedidoId}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: novoStatus })
       });
       const dados = await res.json().catch(() => null);
@@ -253,17 +255,24 @@ const normalizarTamanho = (label = "") =>
     }
   };
 
-  // Busca a lista de usuários (rota protegida: exige token de ADMIN)
-  const carregarUsuarios = async () => {
+  const carregarUsuarios = async (
+    busca = termoBuscaUsuario,
+    ordenacao = ordenacaoUsuarios,
+  ) => {
     setCarregandoUsuarios(true);
     try {
-      const token = localStorage.getItem('@BOO:token');
-      const res = await fetch(`${API_URL}/admin/usuarios`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const ordenacaoApi = ordenacao === 'nome-asc'
+        ? 'nome'
+        : ordenacao === 'admin-first' ? 'admin-first' : 'recentes';
+      const parametros = new URLSearchParams({
+        limite: '100',
+        busca: busca.trim(),
+        ordenacao: ordenacaoApi,
       });
+      const res = await fetch(`${API_URL}/admin/usuarios?${parametros}`);
       if (res.ok) {
         const data = await res.json();
-        setUsuarios(data);
+        setUsuarios(data.itens || data);
       } else if (res.status === 403) {
         dispararToast("Você não tem permissão para ver os usuários.", "erro");
       } else {
@@ -279,10 +288,7 @@ const normalizarTamanho = (label = "") =>
 
   const carregarConfiguracoes = async () => {
     try {
-      const token = localStorage.getItem('@BOO:token');
-      const res = await fetch(`${API_URL}/admin/configuracoes`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetch(`${API_URL}/admin/configuracoes`);
       if (res.ok) {
         const data = await res.json();
         setConfigLoja({
@@ -292,8 +298,12 @@ const normalizarTamanho = (label = "") =>
           lojaAberta: data.lojaAberta ?? true,
           frete: data.frete || {
             ativo: true,
-            valorBase: 19.9,
-            valorGratisApos: 250,
+            motoboyAtivo: true,
+            cepOrigem: "03133000",
+            larguraCm: 20,
+            alturaCm: 8,
+            comprimentoCm: 28,
+            pesoKg: 0.5,
             prazo: "3 a 5 dias úteis"
           }
         });
@@ -307,10 +317,7 @@ const normalizarTamanho = (label = "") =>
   const carregarCupons = async () => {
     setCarregandoCupons(true);
     try {
-      const token = localStorage.getItem('@BOO:token');
-      const res = await fetch(`${API_URL}/admin/cupons`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      const res = await fetch(`${API_URL}/admin/cupons`);
       if (res.ok) {
         const data = await res.json();
         setCupons(data);
@@ -326,15 +333,62 @@ const normalizarTamanho = (label = "") =>
   };
 
   // Promove ou rebaixa um usuário (CLIENTE <-> ADMIN)
+  const carregarLogs = async () => {
+    try {
+      const res = await fetch(`${API_URL}/admin/logs?limite=100&busca=${encodeURIComponent(termoBuscaLog)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setLogsAcoes((data.itens || []).map((log) => ({
+        ...log,
+        nome: log.actorNome,
+        dataHora: log.criadoEm,
+      })));
+    } catch (erro) {
+      console.error('Erro ao carregar logs:', erro);
+    }
+  };
+
+  const carregarEmails = async () => {
+    try {
+      const [templatesRes, entregasRes] = await Promise.all([
+        fetch(`${API_URL}/admin/emails/templates`),
+        fetch(`${API_URL}/admin/emails/entregas`),
+      ]);
+      if (templatesRes.ok) setEmailTemplates(await templatesRes.json());
+      if (entregasRes.ok) {
+        const data = await entregasRes.json();
+        setEntregasEmail(data.itens || []);
+      }
+    } catch (erro) {
+      console.error('Erro ao carregar configuracao de e-mails:', erro);
+    }
+  };
+
+  const salvarTemplatesEmail = async () => {
+    setSalvandoTemplates(true);
+    try {
+      const res = await fetch(`${API_URL}/admin/emails/templates`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templates: emailTemplates }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Erro ao salvar os modelos.');
+      setEmailTemplates(data);
+      dispararToast('Modelos de e-mail salvos.');
+      registrarLogAcao();
+    } catch (erro) {
+      dispararToast(erro.message, 'erro');
+    } finally {
+      setSalvandoTemplates(false);
+    }
+  };
+
   const alterarRoleUsuario = async (usuarioId, novaRole) => {
     try {
-      const token = localStorage.getItem('@BOO:token');
       const res = await fetch(`${API_URL}/admin/usuarios/${usuarioId}/role`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: novaRole })
       });
       if (res.ok) {
@@ -352,49 +406,66 @@ const normalizarTamanho = (label = "") =>
     }
   };
 
-  useEffect(() => {
-    const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
-    const usuarioSalvo = localStorage.getItem('@BOO:usuario') || localStorage.getItem('usuario');
-
-    if (!token || !usuarioSalvo) {
+  const iniciarAdmin = useEffectEvent(async () => {
+    limparTokensLegados();
+    const resposta = await fetch(`${API_URL}/auth/me`);
+    const dados = await resposta.json().catch(() => ({}));
+    if (!resposta.ok || !dados.usuario) {
       window.location.href = '/login';
       return;
     }
-
-    const usuario = JSON.parse(usuarioSalvo);
-    localStorage.setItem('@BOO:token', token);
-    localStorage.setItem('@BOO:usuario', usuarioSalvo);
-
-    if (usuario.role !== 'ADMIN') {
+    if (dados.usuario.role !== 'ADMIN') {
       window.location.href = '/';
       return;
     }
-
-    setIsVerificando(false); 
-    carregarProdutos();
-    carregarCategorias();
-    carregarPedidos();
-    carregarUsuarios();
-    carregarConfiguracoes();
-    carregarCupons();
-  }, []);
+    salvarUsuario(dados.usuario);
+    setIsVerificando(false);
+    await Promise.all([
+      carregarProdutos(),
+      carregarCategorias(),
+      carregarPedidos(),
+      carregarConfiguracoes(),
+      carregarCupons(),
+      carregarLogs(),
+      carregarEmails(),
+    ]);
+  });
 
   useEffect(() => {
-    setIsMenuAberto(false);
-  }, [abaAtiva]);
+    const timer = window.setTimeout(() => void iniciarAdmin(), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const carregarUsuariosFiltrados = useEffectEvent((busca, ordenacao) =>
+    carregarUsuarios(busca, ordenacao),
+  );
+
+  useEffect(() => {
+    if (isVerificando) return undefined;
+    const timer = window.setTimeout(() => {
+      void carregarUsuariosFiltrados(termoBuscaUsuario, ordenacaoUsuarios);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [isVerificando, ordenacaoUsuarios, termoBuscaUsuario]);
 
   const criarNovoProduto = () => {
     const produtoVazio = {
       id: Date.now(),
       isNew: true,
       nome: "",
+      descricao: "",
+      sku: "",
       preco: "",
       estoque: "",
       categoria: categorias[0]?.nome || "Conjuntos",
       cores: ["#000000"],
       imagens: [],
       ultimaPeca: false,
-      tamanhos: TAMANHOS_PADRAO.map((label) => ({ label: normalizarTamanho(label), estoque: label === "M" ? 1 : 0 }))
+      pesoKg: 0.5,
+      alturaCm: 8,
+      larguraCm: 20,
+      comprimentoCm: 28,
+      tamanhos: TAMANHOS_PADRAO.map((label) => ({ label: normalizarTamanho(label), estoque: 0 }))
     };
     setProdutos([produtoVazio, ...produtos]);
     setProdutoEditando(produtoVazio);
@@ -408,14 +479,19 @@ const normalizarTamanho = (label = "") =>
       setProdutos(produtos.filter(prod => prod.id !== produtoParaExcluir.id));
     } else {
       try {
-        const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
-        await fetch(`${API_URL}/produtos/${produtoParaExcluir.id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
+        const resposta = await fetch(`${API_URL}/produtos/${produtoParaExcluir.id}`, {
+          method: 'DELETE'
         });
+        if (!resposta.ok) {
+          const erro = await resposta.json().catch(() => ({}));
+          throw new Error(erro.message || 'Nao foi possivel excluir o produto.');
+        }
         setProdutos(produtos.filter(prod => prod.id !== produtoParaExcluir.id));
       } catch (e) {
         console.error(e);
+        dispararToast(e.message || 'Erro ao excluir o produto.', 'erro');
+        setProdutoParaExcluir(null);
+        return;
       }
     }
 
@@ -436,7 +512,6 @@ const handleFileUpload = async (e) => {
     try {
       const res = await fetch(`${API_URL}/produtos/upload`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('@BOO:token') || localStorage.getItem('token')}` },
         body: formData,
       });
 
@@ -508,6 +583,8 @@ const handleFileUpload = async (e) => {
 
     const payload = {
       nome: produtoEditando.nome,
+      descricao: produtoEditando.descricao || "",
+      sku: produtoEditando.sku || "",
       preco: isNaN(precoFloat) ? 0 : precoFloat,
       estoque: isNaN(estoqueNum) ? 0 : estoqueNum,
       tamanhos: tamanhosNormalizados,
@@ -516,20 +593,19 @@ const handleFileUpload = async (e) => {
       imagens: produtoEditando.imagens,
       ultimaPeca: Boolean(produtoEditando.ultimaPeca),
       oculto: Boolean(produtoEditando.oculto),
-      imgUrl: produtoEditando.imagens[0]?.url || ""
+      imgUrl: produtoEditando.imagens[0]?.url || "",
+      pesoKg: Number(produtoEditando.pesoKg || 0.5),
+      alturaCm: Number(produtoEditando.alturaCm || 8),
+      larguraCm: Number(produtoEditando.larguraCm || 20),
+      comprimentoCm: Number(produtoEditando.comprimentoCm || 28)
     };
 
     try {
       const endpoint = produtoEditando.isNew ? `${API_URL}/produtos` : `${API_URL}/produtos/${produtoEditando.id}`;
       const method = produtoEditando.isNew ? 'POST' : 'PUT';
-      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
-
       const res = await fetch(endpoint, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
@@ -550,7 +626,6 @@ const handleFileUpload = async (e) => {
   const salvarConfiguracoes = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('@BOO:token');
       const payload = {
         ...configLoja,
         instagramUrl: normalizarInstagram(configLoja.instagramUrl),
@@ -558,10 +633,7 @@ const handleFileUpload = async (e) => {
 
       const res = await fetch(`${API_URL}/admin/configuracoes`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
@@ -574,9 +646,12 @@ const handleFileUpload = async (e) => {
           lojaAberta: data.lojaAberta ?? true,
           frete: data.frete || {
             ativo: true,
-            valorBase: 19.9,
-            valorGratisApos: 250,
-            prazo: "3 a 5 dias úteis"
+            motoboyAtivo: true,
+            cepOrigem: "03133000",
+            larguraCm: 20,
+            alturaCm: 8,
+            comprimentoCm: 28,
+            pesoKg: 0.5
           }
         });
         dispararToast("Configurações atualizadas com sucesso!");
@@ -592,13 +667,9 @@ const handleFileUpload = async (e) => {
   const criarCupom = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem('@BOO:token');
       const res = await fetch(`${API_URL}/admin/cupons`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nome: novoCupom.nome,
           codigo: novoCupom.codigo,
@@ -632,13 +703,9 @@ const handleFileUpload = async (e) => {
 
   const alternarStatusCupom = async (cupom) => {
     try {
-      const token = localStorage.getItem('@BOO:token');
       const res = await fetch(`${API_URL}/admin/cupons/${cupom.id}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ativo: !cupom.ativo })
       });
       if (res.ok) {
@@ -655,10 +722,8 @@ const handleFileUpload = async (e) => {
 
   const excluirCupom = async (cupomId) => {
     try {
-      const token = localStorage.getItem('@BOO:token');
       const res = await fetch(`${API_URL}/admin/cupons/${cupomId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        method: 'DELETE'
       });
       if (res.ok) {
         await carregarCupons();
@@ -757,11 +822,31 @@ const handleFileUpload = async (e) => {
     if (!produtoAtual) return;
     const oculto = !produtoAtual.oculto;
     try {
-      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
+      const payload = {
+        nome: produtoAtual.nome,
+        descricao: produtoAtual.descricao || '',
+        sku: produtoAtual.sku || '',
+        preco: Number(String(produtoAtual.preco).replace(',', '.')),
+        estoque: Number(produtoAtual.estoque || 0),
+        tamanhos: (produtoAtual.tamanhos || []).map((item) => ({
+          label: normalizarTamanho(item.label),
+          estoque: Number(item.estoque || 0),
+        })),
+        categoria: produtoAtual.categoria || 'Geral',
+        cores: produtoAtual.cores || [],
+        imagens: produtoAtual.imagens || [],
+        ultimaPeca: Boolean(produtoAtual.ultimaPeca),
+        oculto,
+        imgUrl: produtoAtual.imgUrl || produtoAtual.imagens?.[0]?.url || '',
+        pesoKg: Number(produtoAtual.pesoKg || 0.5),
+        alturaCm: Number(produtoAtual.alturaCm || 8),
+        larguraCm: Number(produtoAtual.larguraCm || 20),
+        comprimentoCm: Number(produtoAtual.comprimentoCm || 28),
+      };
       const resposta = await fetch(`${API_URL}/produtos/${produtoId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...produtoAtual, preco: String(produtoAtual.preco).replace(',', '.'), oculto }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
       });
       if (!resposta.ok) throw new Error('Falha ao atualizar visibilidade.');
       setProdutos((prev) => prev.map((produto) => produto.id === produtoId ? { ...produto, oculto } : produto));
@@ -783,13 +868,9 @@ const handleFileUpload = async (e) => {
 
     setEnviandoEmailTeste(true);
     try {
-      const token = localStorage.getItem('@BOO:token') || localStorage.getItem('token');
       const res = await fetch(`${API_URL}/admin/emails/teste`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: emailTeste.trim() })
       });
       const data = await res.json().catch(() => ({}));
@@ -885,16 +966,7 @@ const handleFileUpload = async (e) => {
     .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm))
     .slice(0, 5);
 
-  const usuariosFiltrados = [...usuarios]
-    .filter(u =>
-      (u.nome || "").toLowerCase().includes(termoBuscaUsuario.toLowerCase()) ||
-      (u.email || "").toLowerCase().includes(termoBuscaUsuario.toLowerCase())
-    )
-    .sort((a, b) => {
-      if (ordenacaoUsuarios === "nome-asc") return (a.nome || "").localeCompare(b.nome || "");
-      if (ordenacaoUsuarios === "admin-first") return (b.role === 'ADMIN') - (a.role === 'ADMIN');
-      return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-    });
+  const usuariosFiltrados = usuarios;
 
   const abrirConfirmacaoRole = (usuario, roleDestino) => {
     setMenuUsuarioAberto(null);
@@ -1012,7 +1084,7 @@ const handleFileUpload = async (e) => {
             Voltar ao Site
           </button>
           <button 
-            onClick={() => { ['token', 'usuario', '@BOO:token', '@BOO:usuario'].forEach((chave) => localStorage.removeItem(chave)); window.location.href='/login'; }}
+              onClick={sair}
             className="w-full flex items-center gap-3 px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-xs tracking-wider uppercase font-medium transition-colors cursor-pointer"
           >
             <FiLogOut className="text-base" />
@@ -1099,7 +1171,7 @@ const handleFileUpload = async (e) => {
                 Voltar ao Site
               </button>
               <button 
-                onClick={() => { ['token', 'usuario', '@BOO:token', '@BOO:usuario'].forEach((chave) => localStorage.removeItem(chave)); window.location.href='/login'; }}
+                onClick={sair}
                 className="w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-xl text-xs tracking-wider uppercase font-medium transition-colors cursor-pointer"
               >
                 <FiLogOut className="text-base" />
@@ -1333,8 +1405,39 @@ const handleFileUpload = async (e) => {
                 </div>
 
                 {/* TABELA DE PRODUTOS COM ALERTAS DE ESTOQUE */}
-                <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-left border-collapse">
+                <div className="bg-white border border-zinc-200 rounded-xl shadow-2xs overflow-visible md:overflow-x-auto">
+                  <div className="divide-y divide-zinc-100 md:hidden">
+                    {produtosAtuais.length === 0 ? (
+                      <p className="px-4 py-10 text-center text-xs uppercase tracking-wider text-zinc-400">Nenhum produto encontrado.</p>
+                    ) : produtosAtuais.map((produto) => {
+                      const qtdEstoque = Number(produto.estoque || 0);
+                      return (
+                        <article key={`mobile-${produto.id}`} className="relative flex gap-3 px-3 py-3">
+                          <img src={produto.imagens?.[0]?.url || produto.imgUrl} alt={produto.nome} className="h-20 w-16 shrink-0 bg-zinc-100 object-cover" />
+                          <div className="min-w-0 flex-1 pr-9">
+                            <p className="truncate text-sm font-semibold text-zinc-900">{produto.nome || 'Produto sem nome'}</p>
+                            <p className="mt-1 text-[10px] uppercase tracking-wider text-zinc-400">{produto.categoria || 'Geral'}</p>
+                            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                              <span className="font-semibold">R$ {produto.preco}</span>
+                              <span className={qtdEstoque < 5 ? 'text-amber-700' : 'text-zinc-500'}>{qtdEstoque} un.</span>
+                              {produto.oculto && <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400">Oculto</span>}
+                            </div>
+                          </div>
+                          <button onClick={() => setMenuProdutoAberto(menuProdutoAberto === produto.id ? null : produto.id)} className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center text-zinc-500" aria-label={`Abrir ações de ${produto.nome}`}>
+                            <FiMoreVertical />
+                          </button>
+                          {menuProdutoAberto === produto.id && (
+                            <div className="absolute right-2 top-11 z-20 w-52 border border-zinc-200 bg-white shadow-lg">
+                              <button onClick={() => abrirEdicaoProduto(produto)} className="w-full px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Editar produto</button>
+                              <button onClick={() => alternarVisibilidadeProduto(produto.id)} className="w-full px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">{produto.oculto ? 'Tornar visível' : 'Ocultar produto'}</button>
+                              <button onClick={() => abrirExclusaoProduto(produto)} className="w-full px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-red-500">Excluir produto</button>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                  <table className="hidden w-full min-w-[720px] text-left border-collapse md:table">
                     <thead>
                       <tr className="border-b border-zinc-100 text-[11px] text-zinc-400 uppercase tracking-widest bg-zinc-50/50">
                         <th className="px-4 py-3 sm:px-6 sm:py-4 font-semibold">Produto</th>
@@ -1472,14 +1575,26 @@ const handleFileUpload = async (e) => {
                       <input type="text" value={produtoEditando.nome} onChange={(e) => setProdutoEditando({...produtoEditando, nome: e.target.value})} className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30" placeholder="Ex: Legging Sculpt Alta Compressão" required />
                     </div>
 
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Descricao</label>
+                      <textarea
+                        value={produtoEditando.descricao || ''}
+                        onChange={(e) => setProdutoEditando({ ...produtoEditando, descricao: e.target.value })}
+                        rows={4}
+                        maxLength={5000}
+                        className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30 resize-y"
+                        placeholder="Material, modelagem, caimento e cuidados com a peca"
+                      />
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Preço (R$)</label>
                         <input type="text" value={produtoEditando.preco} onChange={(e) => setProdutoEditando({...produtoEditando, preco: e.target.value})} className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30" placeholder="00,00" required />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Estoque</label>
-                        <input type="number" min="0" value={produtoEditando.estoque} onChange={(e) => setProdutoEditando({...produtoEditando, estoque: e.target.value})} className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30" placeholder="0" required />
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Estoque total</label>
+                        <input type="number" value={(produtoEditando.tamanhos || []).reduce((total, item) => total + Number(item.estoque || 0), 0)} readOnly className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm text-zinc-500 bg-zinc-100" />
                       </div>
                       <div>
                         <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Categoria</label>
@@ -1493,6 +1608,32 @@ const handleFileUpload = async (e) => {
                           ))}
                         </select>
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 pt-2">
+                      <div className="col-span-2 sm:col-span-1">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">SKU</label>
+                        <input type="text" value={produtoEditando.sku || ''} onChange={(e) => setProdutoEditando({ ...produtoEditando, sku: e.target.value })} className="w-full border border-zinc-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-black" placeholder="BOO-001" />
+                      </div>
+                      {[
+                        ['pesoKg', 'Peso (kg)', 0.01],
+                        ['alturaCm', 'Altura (cm)', 1],
+                        ['larguraCm', 'Largura (cm)', 1],
+                        ['comprimentoCm', 'Comp. (cm)', 1],
+                      ].map(([campo, rotulo, passo]) => (
+                        <div key={campo}>
+                          <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">{rotulo}</label>
+                          <input
+                            type="number"
+                            min={passo}
+                            step={passo}
+                            value={produtoEditando[campo] ?? ''}
+                            onChange={(e) => setProdutoEditando({ ...produtoEditando, [campo]: Number(e.target.value) })}
+                            className="w-full border border-zinc-200 rounded-lg px-3 py-3 text-sm focus:outline-none focus:border-black"
+                            required
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -1755,7 +1896,7 @@ const handleFileUpload = async (e) => {
                     <div className="space-y-2">
                       {(pedidoSelecionado.itens || []).map((item, idx) => (
                         <div key={idx} className="flex justify-between text-xs">
-                          <span className="text-zinc-700">{item.quantidade}x {item.nome} <span className="text-zinc-400">({item.tamanho})</span></span>
+                          <span className="text-zinc-700">{item.quantidade}x {item.nome} <span className="text-zinc-400">({item.tamanhoEscolhido || item.tamanho || 'U'})</span></span>
                           <span className="font-semibold text-zinc-800">R$ {(item.preco * item.quantidade).toFixed(2).replace('.', ',')}</span>
                         </div>
                       ))}
@@ -1874,7 +2015,35 @@ const handleFileUpload = async (e) => {
             {carregandoUsuarios ? (
               <p className="text-sm text-zinc-400">Carregando usuários...</p>
             ) : (
-              <div className="bg-white border border-zinc-200 rounded-xl overflow-x-auto">
+              <>
+              <div className="space-y-2 md:hidden">
+                {usuariosFiltrados.map((u) => (
+                  <article key={`mobile-${u.id}`} className="relative bg-white border-b border-zinc-200 px-1 py-4">
+                    <div className="pr-12">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-zinc-900">{u.nome}</p>
+                        <span className={`text-[9px] font-bold uppercase tracking-wider ${u.role === 'ADMIN' ? 'text-black' : 'text-zinc-400'}`}>
+                          {u.role === 'ADMIN' ? 'Admin' : 'Cliente'}
+                        </span>
+                      </div>
+                      <p className="mt-1 break-all text-xs text-zinc-500">{u.email}</p>
+                      <p className="mt-2 text-[10px] uppercase tracking-wider text-zinc-400">
+                        Cadastro em {new Date(u.createdAt).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                    <button onClick={() => setMenuUsuarioAberto(menuUsuarioAberto === u.id ? null : u.id)} className="absolute right-0 top-3 flex h-9 w-9 items-center justify-center text-zinc-500" aria-label={`Abrir ações de ${u.nome}`}>
+                      <FiMoreVertical />
+                    </button>
+                    {menuUsuarioAberto === u.id && (
+                      <div className="absolute right-0 top-12 z-20 w-52 border border-zinc-200 bg-white shadow-lg">
+                        {u.role !== 'ADMIN' && <button onClick={() => abrirConfirmacaoRole(u, 'ADMIN')} className="w-full px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Tornar Administrador</button>}
+                        {u.role === 'ADMIN' && <button onClick={() => abrirConfirmacaoRole(u, 'CLIENTE')} className="w-full px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider">Tornar Usuário</button>}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+              <div className="hidden bg-white border border-zinc-200 rounded-xl overflow-x-auto md:block">
                 <table className="w-full min-w-[760px] text-sm">
                   <thead>
                     <tr className="border-b border-zinc-100 text-left text-[10px] uppercase tracking-wider text-zinc-400">
@@ -1937,10 +2106,11 @@ const handleFileUpload = async (e) => {
                   </tbody>
                 </table>
 
-                {usuariosFiltrados.length === 0 && (
-                  <p className="text-sm text-zinc-400 text-center py-10">Nenhum usuário encontrado.</p>
-                )}
               </div>
+              {usuariosFiltrados.length === 0 && (
+                <p className="text-sm text-zinc-400 text-center py-10">Nenhum usuário encontrado.</p>
+              )}
+              </>
             )}
 
             {/* Modal de confirmação para alterar permissão */}
@@ -2054,10 +2224,30 @@ const handleFileUpload = async (e) => {
           <div className="max-w-4xl mx-auto">
             <header className="mb-8">
               <h2 className="text-2xl font-normal tracking-tight">Logs de Ações</h2>
-              <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider">Registro local das ações recentes do painel.</p>
+              <p className="text-xs text-zinc-400 mt-1 uppercase tracking-wider">Registro persistente de operações administrativas.</p>
             </header>
 
-            <div className="bg-white border border-zinc-200 rounded-xl overflow-x-auto">
+            <div className="mb-4 flex gap-2">
+              <div className="relative flex-1">
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                <input value={termoBuscaLog} onChange={(e) => setTermoBuscaLog(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && carregarLogs()} placeholder="Buscar por pessoa, ação ou entidade" className="w-full border border-zinc-200 rounded-lg pl-10 pr-4 py-3 text-sm" />
+              </div>
+              <button type="button" onClick={carregarLogs} className="bg-black text-white px-5 rounded-lg text-xs font-semibold uppercase">Buscar</button>
+            </div>
+
+            <div className="divide-y divide-zinc-100 border-y border-zinc-200 bg-white md:hidden">
+              {logsAcoes.map((log) => (
+                <article key={`mobile-${log.id}`} className="py-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <p className="text-sm font-semibold text-zinc-800">{log.nome}</p>
+                    <time className="shrink-0 text-[10px] text-zinc-400">{new Date(log.dataHora).toLocaleString('pt-BR')}</time>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-zinc-500">{log.acao}</p>
+                </article>
+              ))}
+            </div>
+
+            <div className="hidden bg-white border border-zinc-200 rounded-xl overflow-x-auto md:block">
               {logsAcoes.length === 0 ? (
                 <p className="px-6 py-12 text-center text-zinc-400 text-xs uppercase tracking-wider">
                   Nenhuma ação registrada ainda.
@@ -2155,40 +2345,91 @@ const handleFileUpload = async (e) => {
               </div>
 
               <div className="border-t border-zinc-100 pt-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-900">Modelos automaticos de e-mail</p>
+                    <p className="text-xs text-zinc-500 mt-1">Edite em texto simples. Variaveis aceitas: {'{{nome}}'}, {'{{pedido}}'}, {'{{total}}'}, {'{{link}}'}, {'{{limite}}'}, {'{{email}}'}, {'{{pagamento}}'}, {'{{frete}}'}, {'{{destino}}'}, {'{{itens}}'} e {'{{motivo}}'}.</p>
+                  </div>
+                  <button type="button" onClick={salvarTemplatesEmail} disabled={salvandoTemplates} className="shrink-0 bg-black text-white px-5 py-3 rounded-lg text-xs font-semibold uppercase tracking-wider disabled:opacity-50">
+                    {salvandoTemplates ? 'Salvando...' : 'Salvar modelos'}
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {Object.entries(emailTemplates).map(([evento, template]) => (
+                    <details key={evento} className="border border-zinc-200 rounded-lg p-4">
+                      <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-zinc-700">
+                        {evento.replaceAll('_', ' ')}
+                      </summary>
+                      <div className="mt-4 space-y-3">
+                        <label className="flex items-center gap-2 text-xs text-zinc-600">
+                          <input type="checkbox" checked={template.ativo !== false} disabled={['verificar_conta', 'recuperar_senha'].includes(evento)} onChange={(e) => setEmailTemplates((atual) => ({ ...atual, [evento]: { ...template, ativo: e.target.checked } }))} className="accent-black disabled:opacity-50" />
+                          {['verificar_conta', 'recuperar_senha'].includes(evento) ? 'Envio essencial sempre ativo' : 'Envio ativo'}
+                        </label>
+                        <input value={template.assunto || ''} onChange={(e) => setEmailTemplates((atual) => ({ ...atual, [evento]: { ...template, assunto: e.target.value } }))} maxLength={180} className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm" placeholder="Assunto" />
+                        <textarea value={template.corpo || ''} onChange={(e) => setEmailTemplates((atual) => ({ ...atual, [evento]: { ...template, corpo: e.target.value } }))} maxLength={5000} rows={6} className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm resize-y" placeholder="Corpo do e-mail" />
+                      </div>
+                    </details>
+                  ))}
+                </div>
+                {entregasEmail.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Ultimos envios</p>
+                    <div className="divide-y divide-zinc-100 border-y border-zinc-100">
+                      {entregasEmail.slice(0, 8).map((envio) => (
+                        <div key={envio.id} className="py-2 flex items-center justify-between gap-3 text-xs">
+                          <span className="truncate text-zinc-600">{envio.destinatario} - {envio.assunto}</span>
+                          <span className={envio.status === 'SENT' ? 'text-emerald-700' : envio.status === 'FAILED' ? 'text-red-600' : 'text-amber-700'}>{envio.status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-zinc-100 pt-6 space-y-4">
                 <div>
                   <p className="text-sm font-semibold text-zinc-900">Frete da Loja</p>
-                  <p className="text-xs text-zinc-500 mt-1">Defina frete base, faixa de frete grátis e prazo exibido.</p>
+                  <p className="text-xs text-zinc-500 mt-1">Parametros reais usados nas cotacoes da Frenet. Cada produto pode substituir peso e dimensoes.</p>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Valor base</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">CEP de origem</label>
                     <input
-                      type="number"
-                      step="0.01"
-                      value={configLoja.frete?.valorBase ?? 19.9}
-                      onChange={(e) => setConfigLoja({ ...configLoja, frete: { ...configLoja.frete, valorBase: Number(e.target.value || 0) } })}
+                      type="text"
+                      inputMode="numeric"
+                      value={configLoja.frete?.cepOrigem || '03133000'}
+                      onChange={(e) => setConfigLoja({ ...configLoja, frete: { ...configLoja.frete, cepOrigem: e.target.value.replace(/\D/g, '').slice(0, 8) } })}
                       className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30"
                     />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Frete grátis após</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={configLoja.frete?.valorGratisApos ?? 250}
-                      onChange={(e) => setConfigLoja({ ...configLoja, frete: { ...configLoja.frete, valorGratisApos: Number(e.target.value || 0) } })}
-                      className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30"
-                    />
-                  </div>
+                  {[
+                    ['pesoKg', 'Peso padrao (kg)', 0.01, 0.5],
+                    ['alturaCm', 'Altura (cm)', 1, 8],
+                    ['larguraCm', 'Largura (cm)', 1, 20],
+                    ['comprimentoCm', 'Comprimento (cm)', 1, 28],
+                  ].map(([campo, rotulo, passo, padrao]) => (
+                    <div key={campo}>
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">{rotulo}</label>
+                      <input
+                        type="number"
+                        min={passo}
+                        step={passo}
+                        value={configLoja.frete?.[campo] ?? padrao}
+                        onChange={(e) => setConfigLoja({ ...configLoja, frete: { ...configLoja.frete, [campo]: Number(e.target.value || padrao) } })}
+                        className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30"
+                      />
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 mb-2">Prazo exibido</label>
-                  <input
-                    type="text"
-                    value={configLoja.frete?.prazo || "3 a 5 dias úteis"}
-                    onChange={(e) => setConfigLoja({ ...configLoja, frete: { ...configLoja.frete, prazo: e.target.value } })}
-                    className="w-full border border-zinc-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-black bg-zinc-50/30"
-                  />
+                <div className="flex flex-wrap gap-6">
+                  <label className="flex items-center gap-3 text-sm text-zinc-700">
+                    <input type="checkbox" checked={configLoja.frete?.ativo !== false} onChange={(e) => setConfigLoja({ ...configLoja, frete: { ...configLoja.frete, ativo: e.target.checked } })} className="h-4 w-4 accent-black" />
+                    Cotacao Frenet ativa
+                  </label>
+                  <label className="flex items-center gap-3 text-sm text-zinc-700">
+                    <input type="checkbox" checked={configLoja.frete?.motoboyAtivo !== false} onChange={(e) => setConfigLoja({ ...configLoja, frete: { ...configLoja.frete, motoboyAtivo: e.target.checked } })} className="h-4 w-4 accent-black" />
+                    Motoboy metropolitano ativo
+                  </label>
                 </div>
               </div>
 

@@ -1,5 +1,19 @@
-import { Controller, Get, Post, Put, Delete, Body, Param } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  ParseUUIDPipe,
+  UseGuards,
+} from '@nestjs/common';
 import { CategoriasService } from './categorias.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { CategoriaDto } from './categorias.dto';
 
 @Controller('categorias') // Junto com o /api do main.ts, vira /api/categorias
 export class CategoriasController {
@@ -11,22 +25,31 @@ export class CategoriasController {
   }
 
   @Get(':id')
-  async buscarPorId(@Param('id') id: string) {
+  async buscarPorId(@Param('id', ParseUUIDPipe) id: string) {
     return await this.categoriasService.buscarPorId(id);
   }
 
   @Post()
-  async criarCategoria(@Body() dados: any) {
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async criarCategoria(@Body() dados: CategoriaDto) {
     return await this.categoriasService.criarCategoria(dados);
   }
 
   @Put(':id')
-  async atualizarCategoria(@Param('id') id: string, @Body() dados: any) {
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async atualizarCategoria(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dados: CategoriaDto,
+  ) {
     return await this.categoriasService.atualizarCategoria(id, dados);
   }
 
   @Delete(':id')
-  async removerCategoria(@Param('id') id: string) {
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async removerCategoria(@Param('id', ParseUUIDPipe) id: string) {
     return await this.categoriasService.removerCategoria(id);
   }
 }

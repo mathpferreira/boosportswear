@@ -94,6 +94,11 @@ export default function AuthCard({
             onChange={(e) => onPasswordChange(e.target.value)}
             className={inputClasses}
           />
+          {!isRegister && (
+            <a href="/esqueci-senha" className="mt-2 block text-right text-[10px] font-bold uppercase tracking-wider text-zinc-500 hover:text-black">
+              Esqueci minha senha
+            </a>
+          )}
         </div>
 
         <button

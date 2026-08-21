@@ -1,6 +1,17 @@
-import { BadRequestException, Body, Controller, HttpCode, HttpStatus, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { InfinitePayService } from './infinitepay.service';
+import { ConfirmarPagamentoDto, WebhookInfinitePayDto } from './pagamentos.dto';
+import type { AuthenticatedRequest } from '../common/types/request';
 
 @Controller('pagamentos/infinitepay')
 export class PagamentosController {
@@ -8,22 +19,18 @@ export class PagamentosController {
 
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
-  async webhook(@Body() body: any) {
-    try {
-      const resultado = await this.infinitePayService.confirmar(body);
-      if (!resultado.pago) throw new Error('Pagamento ainda nao confirmado.');
-      return { success: true, message: null };
-    } catch (erro: any) {
-      throw new BadRequestException({
-        success: false,
-        message: erro?.message || 'Nao foi possivel confirmar o pagamento.',
-      });
-    }
+  @Throttle({ default: { limit: 120, ttl: 60 * 1000 } })
+  webhook(@Body() body: WebhookInfinitePayDto) {
+    return this.infinitePayService.receberWebhook(body);
   }
 
   @Post('confirmar')
   @UseGuards(JwtAuthGuard)
-  confirmar(@Body() body: any, @Req() req: any) {
+  @Throttle({ default: { limit: 20, ttl: 60 * 1000 } })
+  confirmar(
+    @Body() body: ConfirmarPagamentoDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.infinitePayService.confirmar(body, req.user.id);
   }
 }

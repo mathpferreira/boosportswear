@@ -12,10 +12,40 @@ import { CuponsModule } from './cupons/cupons.module';
 import { FreteModule } from './frete/frete.module';
 import { PagamentosModule } from './pagamentos/pagamentos.module';
 import { EmailsModule } from './emails/emails.module';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { PrismaModule } from '../prisma/prisma.module';
+import { AuditModule } from './audit/audit.module';
+import { AuditInterceptor } from './audit/audit.interceptor';
 
 @Module({
-  imports: [AuthModule, ProdutosModule, CategoriasModule, UsersModule, ConfiguracoesModule, PedidosModule, MinhaContaModule, CuponsModule, FreteModule, PagamentosModule, EmailsModule],
+  imports: [
+    PrismaModule,
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: 60_000,
+        limit: 120,
+      },
+    ]),
+    AuditModule,
+    AuthModule,
+    ProdutosModule,
+    CategoriasModule,
+    UsersModule,
+    ConfiguracoesModule,
+    PedidosModule,
+    MinhaContaModule,
+    CuponsModule,
+    FreteModule,
+    PagamentosModule,
+    EmailsModule,
+  ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+  ],
 })
 export class AppModule {}
