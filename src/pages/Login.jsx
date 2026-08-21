@@ -4,6 +4,7 @@ import AuthCard from '../components/AuthCard';
 import {
   API_URL,
   apiFetch,
+  encerrarSessao,
   limparTokensLegados,
   salvarUsuario,
 } from '../config/api';
@@ -78,10 +79,24 @@ export default function Login({ initialMode = 'login' }) {
           : dados.message;
         throw new Error(mensagem || 'Não foi possível entrar.');
       }
+      if (!dados.usuario?.role) {
+        throw new Error('A API retornou uma sessão incompleta. Tente novamente em instantes.');
+      }
 
       limparTokensLegados();
-      salvarUsuario(dados.usuario);
-      window.location.href = dados.usuario.role === 'ADMIN' ? '/admin' : '/';
+      const sessao = await apiFetch(`${API_URL}/auth/me`, {}, false);
+      const dadosSessao = await sessao.json().catch(() => ({}));
+      if (!sessao.ok || !dadosSessao.usuario?.role) {
+        await encerrarSessao();
+        throw new Error(
+          'O login foi aceito, mas não foi possível criar uma sessão segura. Tente novamente em instantes.',
+        );
+      }
+
+      salvarUsuario(dadosSessao.usuario);
+      navigate(dadosSessao.usuario.role === 'ADMIN' ? '/admin' : '/', {
+        replace: true,
+      });
     } catch (error) {
       setErro(error.message);
     } finally {
