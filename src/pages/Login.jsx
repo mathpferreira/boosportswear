@@ -67,7 +67,10 @@ export default function Login({ initialMode = 'login' }) {
                   versaoTermos,
                   aceitouMarketing: false,
                 }
-              : formData,
+              : {
+                  email: formData.email,
+                  senha: formData.senha,
+                },
           ),
         },
         false,
