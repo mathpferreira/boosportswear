@@ -3,6 +3,7 @@ import {
   Catch,
   ConflictException,
   ExceptionFilter,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -10,6 +11,8 @@ import type { Response } from 'express';
 
 @Catch(Prisma.PrismaClientKnownRequestError)
 export class PrismaExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(PrismaExceptionFilter.name);
+
   catch(exception: Prisma.PrismaClientKnownRequestError, host: ArgumentsHost) {
     const response = host.switchToHttp().getResponse<Response>();
     const erro =
@@ -24,6 +27,9 @@ export class PrismaExceptionFilter implements ExceptionFilter {
             : null;
 
     if (!erro) {
+      this.logger.error(
+        `Prisma ${exception.code} (client ${exception.clientVersion}): ${JSON.stringify(exception.meta || {})}`,
+      );
       response.status(500).json({
         statusCode: 500,
         message: 'Não foi possível concluir a operação no banco de dados.',

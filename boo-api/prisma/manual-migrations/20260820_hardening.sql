@@ -211,4 +211,15 @@ ALTER TYPE "EmailTokenType" OWNER TO boo_user;
 ALTER TYPE "EmailDeliveryStatus" OWNER TO boo_user;
 ALTER TYPE "PaymentWebhookStatus" OWNER TO boo_user;
 
+-- Deploys that already use the restricted runtime role must receive access to
+-- the newly created tables without gaining schema-changing privileges.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'boo_app') THEN
+    EXECUTE 'GRANT USAGE ON SCHEMA public TO boo_app';
+    EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO boo_app';
+    EXECUTE 'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO boo_app';
+  END IF;
+END $$;
+
 COMMIT;

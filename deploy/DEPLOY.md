@@ -38,6 +38,12 @@ backslashes ou links em formato Markdown no arquivo `.env`.
 ```bash
 sudo -u postgres psql -d boo_db -v ON_ERROR_STOP=1 \
   -f /var/www/boosportswear/boo-api/prisma/manual-migrations/20260820_hardening.sql
+sudo -u postgres psql -d boo_db -v ON_ERROR_STOP=1 -c "
+  SELECT
+    EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Produto' AND column_name = 'excluidoEm') AS produto_ok,
+    EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'User' AND column_name = 'tokenVersion') AS usuario_ok,
+    EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Configuracao' AND column_name = 'emailTemplates') AS configuracao_ok,
+    EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'RefreshSession') AS sessao_ok;"
 sudo -u postgres psql -d boo_db -c 'SELECT (SELECT COUNT(*) FROM "Produto") AS produtos, (SELECT COUNT(*) FROM "Pedido") AS pedidos, (SELECT COUNT(*) FROM "User") AS usuarios;'
 ```
 
