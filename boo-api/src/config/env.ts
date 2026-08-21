@@ -22,6 +22,15 @@ export function validarAmbiente() {
     !databaseUrl.startsWith('postgres://')
   ) {
     erros.push('DATABASE_URL deve iniciar com postgresql:// ou postgres://');
+  } else {
+    try {
+      const url = new URL(databaseUrl);
+      if ((url.searchParams.get('schema') || 'public') !== 'public') {
+        erros.push('DATABASE_URL deve usar ?schema=public');
+      }
+    } catch {
+      erros.push('DATABASE_URL deve ser uma URL PostgreSQL valida');
+    }
   }
 
   const jwtSecret = process.env.JWT_SECRET?.trim() || '';

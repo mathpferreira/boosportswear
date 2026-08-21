@@ -33,6 +33,13 @@ Antes do restart, confirme no `boo-api/.env` que existem `NODE_ENV=production`,
 credenciais de banco, Frenet, InfinitePay e Resend. Nao use colchetes,
 backslashes ou links em formato Markdown no arquivo `.env`.
 
+Valide a URL sem imprimir a senha:
+
+```bash
+cd /var/www/boosportswear/boo-api
+node -e 'require("dotenv").config({override:true}); const u=new URL(process.env.DATABASE_URL); console.log({banco:u.pathname,schema:u.searchParams.get("schema")||"public"}); if((u.searchParams.get("schema")||"public")!=="public") process.exit(1)'
+```
+
 ## 3. Aplicar a migracao preservando os dados
 
 ```bash
