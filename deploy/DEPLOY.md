@@ -27,6 +27,12 @@ npx prisma validate
 npm run build
 ```
 
+Antes do restart, confirme no `boo-api/.env` que existem `NODE_ENV=production`,
+`API_HOST=127.0.0.1`, `JWT_SECRET` aleatorio com ao menos 32 caracteres,
+`PAGAMENTO_EXPIRACAO_MINUTOS=30` e `TERMS_VERSION=2026-08-20`, alem das
+credenciais de banco, Frenet, InfinitePay e Resend. Nao use colchetes,
+backslashes ou links em formato Markdown no arquivo `.env`.
+
 ## 3. Aplicar a migracao preservando os dados
 
 ```bash
@@ -67,7 +73,21 @@ cd /var/www/boosportswear
 pm2 startOrReload deploy/pm2/ecosystem.config.cjs --update-env
 pm2 save
 curl --fail --silent https://boosportwear.com/api/health
+
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  -X POST https://boosportwear.com/api/auth/refresh \
+  -H 'Origin: https://boosportwear.com' \
+  -H 'Content-Type: application/json' -d '{}')" = "401"
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  https://boosportwear.com/api/auth/me)" = "401"
+test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  -X POST https://boosportwear.com/api/auth/logout \
+  -H 'Origin: https://boosportwear.com' \
+  -H 'Content-Type: application/json' -d '{}')" = "200"
 ```
+
+As respostas esperadas sem login sao `401`, `401` e `200`. Qualquer `404`
+significa que o processo antigo ainda esta atendendo a porta `3000`.
 
 ## 7. Nginx e backup diario
 
