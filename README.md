@@ -1,146 +1,169 @@
 <div align="center">
 
-# BooSportswear
+<img src="./src/assets/logo.png" alt="BOO Sportswear" width="180" />
 
-### E-commerce de moda esportiva desenvolvido como projeto full stack.
+# BOO Sportswear
 
-Aplicação criada com foco em experiência de compra, organização de produtos, integração entre frontend e backend e estrutura preparada para ambiente de produção.
+**Plataforma de e-commerce full stack para moda esportiva.**
+
+[![CI](https://github.com/mathpferreira/boosportswear/actions/workflows/ci.yml/badge.svg)](https://github.com/mathpferreira/boosportswear/actions/workflows/ci.yml)
+![React](https://img.shields.io/badge/React-19-20232a?logo=react&logoColor=61DAFB)
+![NestJS](https://img.shields.io/badge/NestJS-11-E0234E?logo=nestjs&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?logo=postgresql&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?logo=prisma&logoColor=white)
 
 </div>
 
 ---
 
-## Sobre o projeto
+## Visão geral
 
-A **BooSportswear** é uma plataforma de e-commerce desenvolvida para o segmento de moda esportiva.
+A **BOO Sportswear** é uma aplicação de e-commerce desenvolvida de ponta a ponta, reunindo experiência de compra, gestão operacional e infraestrutura de produção em um único projeto.
 
-O projeto foi construído de forma full stack, com uma aplicação web moderna no frontend e uma API própria responsável pela comunicação com o banco de dados e pelas regras da aplicação.
+O frontend é construído com **React + Vite**, enquanto a API utiliza **NestJS + Prisma + PostgreSQL**. O projeto também contempla autenticação, pagamentos, frete, e-mails transacionais, administração da loja, auditoria e rotinas de deploy/backup.
 
-Além do desenvolvimento da interface, o projeto também envolve configuração de servidor, banco de dados, API, armazenamento de imagens e publicação em ambiente Linux.
+> Este repositório é apresentado como **portfólio e demonstração técnica**. O código-fonte não é distribuído sob uma licença open source.
 
 ---
 
-## Tecnologias utilizadas
+## Funcionalidades
 
-### Frontend
+### Loja e cliente
 
-* React
-* Vite
-* JavaScript
-* CSS
+- Catálogo e páginas de produto
+- Carrinho de compras
+- Cadastro, login e autenticação JWT
+- Verificação de e-mail e recuperação de senha
+- Área de conta do cliente
+- Histórico de pedidos
+- Cupons de desconto
+- Cálculo de frete
+- Fluxo de checkout e pagamento
 
-### Backend
+### Operação
 
-* Node.js
-* NestJS
-* Prisma ORM
-* PostgreSQL
-* Sharp
+- Integração de pagamentos com InfinitePay
+- Integração de frete com Frenet
+- E-mails transacionais
+- Gestão de produtos e categorias
+- Gestão de pedidos e usuários
+- Configurações administrativas
+- Registro de auditoria
+- Processamento de imagens
 
 ### Infraestrutura
 
-* Ubuntu Linux
-* Nginx
-* VPS
-* Git
-* GitHub
+- API REST em NestJS
+- Persistência com PostgreSQL e Prisma ORM
+- Nginx como proxy reverso
+- Processo da API gerenciado com PM2
+- Backups automatizados com retenção e checksum
+- Configuração de usuário de banco com privilégio mínimo
+- CI com lint, validação do Prisma e build de frontend/backend
 
 ---
 
 ## Arquitetura
 
 ```text
-Frontend
+Cliente
+  │
+  ▼
 React + Vite
-      │
-      ▼
-   API REST
-    NestJS
-      │
-      ▼
- Prisma ORM
-      │
-      ▼
- PostgreSQL
+  │
+  ▼
+Nginx
+  │
+  ▼
+NestJS API
+  ├── Autenticação e usuários
+  ├── Produtos e categorias
+  ├── Pedidos e cupons
+  ├── Frete
+  ├── Pagamentos
+  ├── E-mails
+  └── Auditoria
+  │
+  ▼
+Prisma ORM
+  │
+  ▼
+PostgreSQL
 ```
 
-O frontend e o backend possuem responsabilidades separadas, facilitando a manutenção e evolução da aplicação.
+Uma visão mais detalhada está em [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
 ---
 
-## Principais funcionalidades
+## Stack
 
-* Catálogo de produtos
-* Exibição de informações e imagens dos produtos
-* Integração entre frontend e API
-* Persistência de dados em PostgreSQL
-* API REST própria
-* Processamento de imagens
-* Interface responsiva
-* Estrutura preparada para ambiente de produção
+| Camada | Tecnologias |
+| --- | --- |
+| Frontend | React 19, Vite, React Router, Tailwind CSS |
+| Backend | Node.js, NestJS 11, TypeScript |
+| Dados | PostgreSQL, Prisma ORM |
+| Integrações | InfinitePay, Frenet, Resend |
+| Infraestrutura | Ubuntu Linux, Nginx, PM2, systemd |
+| Qualidade | ESLint, Jest, GitHub Actions |
 
 ---
 
-## Estrutura do projeto
+## Estrutura
 
 ```text
 boosportswear/
-│
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── assets/
-│
-├── public/
-│
-├── boo-api/
-│   ├── src/
-│   ├── prisma/
-│   └── uploads/
-│
-└── ...
+├── .github/workflows/     # Integração contínua
+├── boo-api/               # API NestJS
+│   ├── prisma/            # Schema e migrations
+│   ├── src/               # Módulos de domínio
+│   └── test/              # Testes da API
+├── deploy/                # Nginx, PM2, backup e PostgreSQL
+├── docs/                  # Documentação técnica
+├── public/                # Assets públicos
+└── src/                   # Aplicação React
+    ├── components/
+    ├── config/
+    └── pages/
 ```
 
 ---
 
-## Desenvolvimento
+## Qualidade e operação
 
-Durante o desenvolvimento da BooSportswear foram trabalhados conceitos como:
+O repositório possui um pipeline de **CI** que valida automaticamente alterações antes de serem integradas à branch principal:
 
-* Desenvolvimento Full Stack
-* Componentização com React
-* Criação de APIs REST
-* Integração frontend/backend
-* Banco de dados relacional
-* ORM e migrations
-* Manipulação de imagens
-* Deploy em servidor Linux
-* Configuração de Nginx
-* Versionamento com Git
-* Gerenciamento de ambiente de produção
+- instalação reproduzível com `npm ci`;
+- lint do frontend e backend;
+- geração e validação do Prisma Client;
+- build do frontend;
+- build da API.
+
+As configurações de produção ficam separadas do código sensível: arquivos `.env` reais não são versionados e o repositório mantém apenas exemplos de configuração.
+
+---
+
+## Documentação técnica
+
+- [`boo-api/README.md`](./boo-api/README.md) — visão geral da API
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — arquitetura e responsabilidades
+- [`deploy/DEPLOY.md`](./deploy/DEPLOY.md) — processo operacional de deploy
 
 ---
 
 ## Status
 
-🚧 **Projeto em desenvolvimento**
+🚧 **Em desenvolvimento ativo**
 
-A aplicação continua recebendo melhorias de interface, estrutura e funcionalidades.
+A plataforma continua recebendo melhorias de interface, segurança, operação e funcionalidades.
 
 ---
 
 ## Autor
 
-**Matheus Ferreira**
-
-GitHub: **@mathpferreira**
-
----
+Desenvolvido por **Matheus Ferreira** — [@mathpferreira](https://github.com/mathpferreira)
 
 <div align="center">
 
-**BooSportswear © 2026**
-
-Projeto desenvolvido para fins de portfólio e demonstração.
+**BOO Sportswear © 2026**
 
 </div>
