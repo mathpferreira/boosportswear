@@ -1,0 +1,46 @@
+name: Normalize package metadata
+
+on:
+  push:
+    branches: [chore/portfolio-polish]
+    paths:
+      - package.json
+      - .github/workflows/normalize-package-metadata.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: chore/portfolio-polish
+
+      - name: Normalize package-lock metadata
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(path, 'utf8'));
+          lock.name = 'boosportswear';
+          if (lock.packages && lock.packages['']) {
+            lock.packages[''].name = 'boosportswear';
+          }
+          fs.writeFileSync(path, `${JSON.stringify(lock, null, 2)}\n`);
+          NODE
+
+      - name: Commit normalized lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore: sincroniza nome do package-lock"
+          git push
