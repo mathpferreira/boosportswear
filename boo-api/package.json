@@ -1,8 +1,8 @@
 {
   "name": "boo-api",
   "version": "0.0.1",
-  "description": "",
-  "author": "",
+  "description": "Backend API da plataforma de e-commerce BOO Sportswear.",
+  "author": "Matheus Ferreira",
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
