@@ -1,7 +1,10 @@
 {
-  "name": "aura-studio",
+  "name": "boosportswear",
   "private": true,
   "version": "0.0.0",
+  "description": "Frontend da plataforma de e-commerce BOO Sportswear.",
+  "author": "Matheus Ferreira",
+  "homepage": "https://boosportwear.com",
   "type": "module",
   "scripts": {
     "dev": "vite",
